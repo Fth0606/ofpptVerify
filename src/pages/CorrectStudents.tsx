@@ -1,8 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { mockStudents, groupByFiliereClasse } from "@/lib/mock-data";
-import { CheckCircle2 } from "lucide-react";
+import { exportVerifiedToExcel, exportVerifiedToPDF } from "@/lib/export-utils";
+import { CheckCircle2, FileDown, FileSpreadsheet } from "lucide-react";
 
 const CorrectStudents = () => {
   const verifiedStudents = mockStudents.filter(s => s.status === "verified");
@@ -10,12 +12,24 @@ const CorrectStudents = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-          <CheckCircle2 className="h-6 w-6 text-success" />
-          Verified Students
-        </h1>
-        <p className="text-muted-foreground">Students whose document data matches Excel records, grouped by filière and classe</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <CheckCircle2 className="h-6 w-6 text-success" />
+            Verified Students
+          </h1>
+          <p className="text-muted-foreground">Students whose document data matches Excel records, grouped by filière and classe</p>
+        </div>
+        {verifiedStudents.length > 0 && (
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => exportVerifiedToExcel(verifiedStudents)}>
+              <FileSpreadsheet className="mr-2 h-4 w-4" />Excel
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => exportVerifiedToPDF(verifiedStudents)}>
+              <FileDown className="mr-2 h-4 w-4" />PDF
+            </Button>
+          </div>
+        )}
       </div>
 
       {Object.keys(grouped).length === 0 ? (
