@@ -41,6 +41,10 @@ export const mockStudents: Student[] = [
   { id: "6", fullName: "Sara Mouline", dateOfBirth: "2001-04-25", birthplace: "Agadir", cin: "BM234567", filiere: "Développement Digital", classe: "DD202", group: "B", status: "mismatch", documentsUploaded: 3, parentName: "Driss Mouline", bacYear: "2020", bacScore: "11.50", bacMention: "Passable" },
   { id: "7", fullName: "Hamza Chraibi", dateOfBirth: "2000-09-30", birthplace: "Oujda", cin: "BN890123", filiere: "Gestion des Entreprises", classe: "GE301", group: "A", status: "verified", documentsUploaded: 3, parentName: "Nabil Chraibi", bacYear: "2019", bacScore: "14.00", bacMention: "Bien" },
   { id: "8", fullName: "Zineb El Fassi", dateOfBirth: "2001-12-08", birthplace: "Meknès", cin: "BP456789", filiere: "Infrastructure Digitale", classe: "ID102", group: "C", status: "pending", documentsUploaded: 2, parentName: "Aziz El Fassi", bacYear: "2020", bacScore: "13.75", bacMention: "Assez Bien" },
+  { id: "9", fullName: "Rachid Lahlou", dateOfBirth: "2000-02-14", birthplace: "Kenitra", cin: "BQ112233", filiere: "Développement Digital", classe: "DD201", group: "B", status: "mismatch", documentsUploaded: 3, parentName: "Ali Lahlou", bacYear: "2019", bacScore: "12.00", bacMention: "Assez Bien" },
+  { id: "10", fullName: "Nadia Bouazza", dateOfBirth: "2001-08-19", birthplace: "Safi", cin: "BR445566", filiere: "Gestion des Entreprises", classe: "GE302", group: "A", status: "verified", documentsUploaded: 3, parentName: "Mustapha Bouazza", bacYear: "2020", bacScore: "15.00", bacMention: "Bien" },
+  { id: "11", fullName: "Amine Kettani", dateOfBirth: "1999-11-03", birthplace: "El Jadida", cin: "BS778899", filiere: "Infrastructure Digitale", classe: "ID102", group: "B", status: "mismatch", documentsUploaded: 3, parentName: "Youssef Kettani", bacYear: "2018", bacScore: "10.50", bacMention: "Passable" },
+  { id: "12", fullName: "Houda Filali", dateOfBirth: "2000-05-27", birthplace: "Tétouan", cin: "BT990011", filiere: "Développement Digital", classe: "DD202", group: "A", status: "verified", documentsUploaded: 3, parentName: "Abdelkader Filali", bacYear: "2019", bacScore: "14.25", bacMention: "Bien" },
 ];
 
 export const mockMismatches: StudentMismatch[] = [
@@ -59,6 +63,21 @@ export const mockMismatches: StudentMismatch[] = [
     ],
     notes: "",
   },
+  {
+    student: mockStudents[8],
+    mismatches: [
+      { field: "Birthplace", excelValue: "Kenitra", ocrValue: "Kénitra", document: "birth_certificate" },
+      { field: "Parent Name", excelValue: "Ali Lahlou", ocrValue: "Ali Lahlou Idrissi", document: "birth_certificate" },
+    ],
+    notes: "",
+  },
+  {
+    student: mockStudents[10],
+    mismatches: [
+      { field: "Bac Score", excelValue: "10.50", ocrValue: "10.80", document: "baccalaureate" },
+    ],
+    notes: "",
+  },
 ];
 
 export const dashboardStats = {
@@ -68,3 +87,15 @@ export const dashboardStats = {
   mismatches: mockStudents.filter(s => s.status === "mismatch").length,
   missing: mockStudents.filter(s => s.status === "missing").length,
 };
+
+/** Group students by filière then classe */
+export function groupByFiliereClasse(students: Student[]): Record<string, Record<string, Student[]>> {
+  const grouped: Record<string, Record<string, Student[]>> = {};
+  const sorted = [...students].sort((a, b) => a.filiere.localeCompare(b.filiere) || a.classe.localeCompare(b.classe));
+  for (const s of sorted) {
+    if (!grouped[s.filiere]) grouped[s.filiere] = {};
+    if (!grouped[s.filiere][s.classe]) grouped[s.filiere][s.classe] = [];
+    grouped[s.filiere][s.classe].push(s);
+  }
+  return grouped;
+}

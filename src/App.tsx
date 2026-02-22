@@ -10,7 +10,8 @@ import Students from "@/pages/Students";
 import StudentDetail from "@/pages/StudentDetail";
 import ImportExcel from "@/pages/ImportExcel";
 import UploadDocuments from "@/pages/UploadDocuments";
-import Mismatches from "@/pages/Mismatches";
+import MismatchedStudents from "@/pages/MismatchedStudents";
+import CorrectStudents from "@/pages/CorrectStudents";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -30,7 +31,8 @@ const App = () => (
             <Route path="/students/:id" element={<StudentDetail />} />
             <Route path="/import" element={<ImportExcel />} />
             <Route path="/upload" element={<UploadDocuments />} />
-            <Route path="/mismatches" element={<Mismatches />} />
+            <Route path="/mismatched" element={<MismatchedStudents />} />
+            <Route path="/verified" element={<CorrectStudents />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
