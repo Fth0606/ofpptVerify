@@ -1,10 +1,11 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { mockStudents, mockMismatches, groupByFiliereClasse, type StudentMismatch } from "@/lib/mock-data";
-import { AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
+import { exportMismatchedToExcel, exportMismatchedToPDF } from "@/lib/export-utils";
+import { AlertTriangle, ChevronDown, ChevronUp, FileDown, FileSpreadsheet } from "lucide-react";
 import { useState } from "react";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 const docLabel = (doc: string) => {
   switch (doc) {
@@ -25,12 +26,24 @@ const MismatchedStudents = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-          <AlertTriangle className="h-6 w-6 text-warning" />
-          Students with Mismatches
-        </h1>
-        <p className="text-muted-foreground">Students whose document data differs from Excel records, grouped by filière and classe</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <AlertTriangle className="h-6 w-6 text-warning" />
+            Students with Mismatches
+          </h1>
+          <p className="text-muted-foreground">Students whose document data differs from Excel records, grouped by filière and classe</p>
+        </div>
+        {mismatchStudents.length > 0 && (
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => exportMismatchedToExcel(mismatchStudents, mockMismatches)}>
+              <FileSpreadsheet className="mr-2 h-4 w-4" />Excel
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => exportMismatchedToPDF(mismatchStudents, mockMismatches)}>
+              <FileDown className="mr-2 h-4 w-4" />PDF
+            </Button>
+          </div>
+        )}
       </div>
 
       {Object.keys(grouped).length === 0 ? (
