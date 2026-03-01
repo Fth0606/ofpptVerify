@@ -3,29 +3,74 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { FileUp, FileSpreadsheet, Check } from "lucide-react";
-
-const samplePreview = [
-  { name: "Ahmed Ben Ali", dob: "1999-03-15", cin: "BK123456", filiere: "Développement Digital", classe: "DD201", group: "A" },
-  { name: "Fatima Zahra El Idrissi", dob: "2000-07-22", cin: "BH789012", filiere: "Infrastructure Digitale", classe: "ID101", group: "B" },
-  { name: "Youssef Amrani", dob: "2001-01-10", cin: "CD345678", filiere: "Développement Digital", classe: "DD201", group: "A" },
-];
+import * as XLSX from "xlsx";
+import { apiService } from "@/lib/api-service";
+import { toast } from "sonner";
 
 const ImportExcel = () => {
   const [file, setFile] = useState<File | null>(null);
+  const [previewData, setPreviewData] = useState<any[]>([]);
   const [imported, setImported] = useState(false);
+  const [importing, setImporting] = useState(false);
+
+  const processExcel = (f: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const bstr = e.target?.result;
+      const wb = XLSX.read(bstr, { type: "binary" });
+      const wsname = wb.SheetNames[0];
+      const ws = wb.Sheets[wsname];
+      const data = XLSX.utils.sheet_to_json(ws);
+      setPreviewData(data);
+    };
+    reader.readAsBinaryString(f);
+  };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const f = e.dataTransfer.files[0];
-    if (f) setFile(f);
+    if (f) {
+      setFile(f);
+      processExcel(f);
+    }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.[0]) setFile(e.target.files[0]);
+    if (e.target.files?.[0]) {
+      const f = e.target.files[0];
+      setFile(f);
+      processExcel(f);
+    }
   };
 
-  const handleImport = () => {
-    setImported(true);
+  const handleImport = async () => {
+    setImporting(true);
+    try {
+      // Map Excel data to student structure
+      const students = previewData.map(row => ({
+        id: row.id || row.student_id || row.CIN || Math.random().toString(36).substr(2, 9),
+        fullName: row.fullName || row.Name || row["Nom Complet"],
+        dateOfBirth: row.dateOfBirth || row.DOB || row["Date de naissance"],
+        birthplace: row.birthplace || row.Birthplace || row["Lieu de naissance"],
+        cin: row.cin || row.CIN || row.ID,
+        filiere: row.filiere || row.Filière,
+        classe: row.classe || row.Classe,
+        group: row.group || row.Group || row.Groupe,
+        parentName: row.parentName || row["Nom du parent"],
+        bacYear: row.bacYear || row["Année du bac"],
+        bacScore: row.bacScore || row["Moyenne du bac"],
+        bacMention: row.bacMention || row["Mention du bac"],
+      }));
+
+      await apiService.bulkStoreStudents(students);
+      setImported(true);
+      toast.success(`${students.length} students imported successfully`);
+    } catch (error) {
+      console.error("Import error:", error);
+      toast.error("Failed to import students to the database");
+    } finally {
+      setImporting(false);
+    }
   };
 
   return (
@@ -64,40 +109,43 @@ const ImportExcel = () => {
       </Card>
 
       {/* Preview */}
-      {file && !imported && (
+      {file && previewData.length > 0 && !imported && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Preview</CardTitle>
             <CardDescription>Review the data before importing</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Date of Birth</TableHead>
-                  <TableHead>CIN</TableHead>
-                  <TableHead>Filière</TableHead>
-                  <TableHead>Classe</TableHead>
-                  <TableHead>Group</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {samplePreview.map((r, i) => (
-                  <TableRow key={i}>
-                    <TableCell className="font-medium">{r.name}</TableCell>
-                    <TableCell>{r.dob}</TableCell>
-                    <TableCell>{r.cin}</TableCell>
-                    <TableCell>{r.filiere}</TableCell>
-                    <TableCell>{r.classe}</TableCell>
-                    <TableCell>{r.group}</TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    {Object.keys(previewData[0]).map(key => (
+                      <TableHead key={key}>{key}</TableHead>
+                    ))}
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {previewData.slice(0, 5).map((r, i) => (
+                    <TableRow key={i}>
+                      {Object.values(r).map((val: any, j) => (
+                        <TableCell key={j}>{val}</TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            {previewData.length > 5 && (
+              <p className="p-4 text-xs text-center text-muted-foreground">
+                Showing first 5 of {previewData.length} records
+              </p>
+            )}
           </CardContent>
           <div className="flex justify-end p-4">
-            <Button onClick={handleImport}>Import {samplePreview.length} Students</Button>
+            <Button onClick={handleImport} disabled={importing}>
+              {importing ? "Importing..." : `Import ${previewData.length} Students`}
+            </Button>
           </div>
         </Card>
       )}
@@ -105,11 +153,14 @@ const ImportExcel = () => {
       {imported && (
         <Card>
           <CardContent className="flex flex-col items-center gap-3 py-12">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-success/15">
-              <Check className="h-6 w-6 text-success" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-150">
+              <Check className="h-6 w-6 text-green-600" />
             </div>
             <p className="font-semibold">Import Successful!</p>
-            <p className="text-sm text-muted-foreground">{samplePreview.length} students have been imported.</p>
+            <p className="text-sm text-muted-foreground">{previewData.length} students have been imported.</p>
+            <Button variant="outline" onClick={() => { setFile(null); setPreviewData([]); setImported(false); }}>
+              Import Another File
+            </Button>
           </CardContent>
         </Card>
       )}

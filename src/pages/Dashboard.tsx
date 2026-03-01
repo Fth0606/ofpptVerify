@@ -1,96 +1,163 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { dashboardStats, mockStudents } from "@/lib/mock-data";
-import { Users, CheckCircle2, AlertTriangle, Clock, FileX2 } from "lucide-react";
+import { Users, FileCheck, AlertCircle, FileX, ArrowRight, Upload } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-
-const statCards = [
-  { label: "Total Students", value: dashboardStats.total, icon: Users, color: "text-primary" },
-  { label: "Verified", value: dashboardStats.verified, icon: CheckCircle2, color: "text-success" },
-  { label: "Mismatches", value: dashboardStats.mismatches, icon: AlertTriangle, color: "text-warning" },
-  { label: "Pending", value: dashboardStats.pending, icon: Clock, color: "text-muted-foreground" },
-  { label: "Missing Docs", value: dashboardStats.missing, icon: FileX2, color: "text-destructive" },
-];
-
-const statusBadge = (status: string) => {
-  switch (status) {
-    case "verified": return <Badge className="bg-success/15 text-success border-0">✅ Verified</Badge>;
-    case "mismatch": return <Badge className="bg-warning/15 text-warning border-0">⚠️ Mismatch</Badge>;
-    case "pending": return <Badge variant="secondary">⏳ Pending</Badge>;
-    case "missing": return <Badge variant="destructive">❌ Missing</Badge>;
-    default: return null;
-  }
-};
+import { apiService, Student } from "@/lib/api-service";
+import { toast } from "sonner";
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const verifiedPercent = Math.round((dashboardStats.verified / dashboardStats.total) * 100);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const getStudents = async () => {
+      try {
+        const data = await apiService.fetchStudents();
+        setStudents(data);
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    getStudents();
+  }, []);
+
+  const stats = {
+    total: students.length,
+    verified: students.filter(s => s.status === "verified").length,
+    mismatches: students.filter(s => s.status === "mismatch").length,
+    missing: students.filter(s => s.status === "missing" || s.documentsUploaded === 0).length,
+  };
+
+  const recentActivity = students.slice(0, 5).map(s => ({
+    student: s.fullName,
+    cin: s.cin,
+    status: s.status,
+    time: "Last update",
+  }));
+
+  const quickActions = [
+    { title: "Import Students", description: "Upload .xlsx file", icon: Users, path: "/import", color: "bg-blue-100 text-blue-600" },
+    { title: "Upload Documents", description: "Process images with OCR", icon: Upload, path: "/upload", color: "bg-purple-100 text-purple-600" },
+    { title: "Review Mismatches", description: "Fix OCR discrepancies", icon: AlertCircle, path: "/mismatched", color: "bg-red-100 text-red-600" },
+  ];
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground">Overview of student document verification progress</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">System Dashboard</h1>
+          <p className="text-muted-foreground">Monitor verification progress and recent activities</p>
+        </div>
       </div>
 
-      {/* Stat Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        {statCards.map((stat) => (
-          <Card key={stat.label}>
-            <CardContent className="flex items-center gap-4 p-5">
-              <stat.icon className={`h-8 w-8 ${stat.color}`} />
-              <div>
-                <p className="text-2xl font-bold">{stat.value}</p>
-                <p className="text-xs text-muted-foreground">{stat.label}</p>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+      {/* Stats Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate("/students")}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Students</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{loading ? "..." : stats.total}</div>
+            <p className="text-xs text-muted-foreground">In the system</p>
+          </CardContent>
+        </Card>
+        <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate("/correct")}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Verified</CardTitle>
+            <FileCheck className="h-4 w-4 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">{loading ? "..." : stats.verified}</div>
+            <p className="text-xs text-muted-foreground">Ready for export</p>
+          </CardContent>
+        </Card>
+        <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate("/mismatched")}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Mismatches</CardTitle>
+            <AlertCircle className="h-4 w-4 text-red-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">{loading ? "..." : stats.mismatches}</div>
+            <p className="text-xs text-muted-foreground">Require attention</p>
+          </CardContent>
+        </Card>
+        <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate("/students")}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Missing Docs</CardTitle>
+            <FileX className="h-4 w-4 text-orange-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-600">{loading ? "..." : stats.missing}</div>
+            <p className="text-xs text-muted-foreground">Awaiting upload</p>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Progress */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Verification Progress</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-4">
-            <Progress value={verifiedPercent} className="flex-1" />
-            <span className="text-sm font-semibold">{verifiedPercent}%</span>
-          </div>
-          <p className="mt-2 text-xs text-muted-foreground">
-            {dashboardStats.verified} of {dashboardStats.total} students fully verified
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* Recent Students */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Recent Students</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {mockStudents.slice(0, 5).map((student) => (
-              <div
-                key={student.id}
-                className="flex cursor-pointer items-center justify-between rounded-lg border p-3 transition-colors hover:bg-muted/50"
-                onClick={() => navigate(`/students/${student.id}`)}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+        {/* Quick Actions */}
+        <Card className="lg:col-span-4">
+          <CardHeader>
+            <CardTitle className="text-base font-semibold">Quick Actions</CardTitle>
+            <CardDescription>Common tasks to manage the system</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-3">
+            {quickActions.map((action) => (
+              <button
+                key={action.title}
+                onClick={() => navigate(action.path)}
+                className="flex flex-col items-center gap-3 rounded-xl border p-4 text-center transition-all hover:bg-muted hover:shadow-sm"
               >
-                <div>
-                  <p className="font-medium">{student.fullName}</p>
-                  <p className="text-xs text-muted-foreground">{student.filiere} · {student.classe}</p>
+                <div className={`flex h-12 w-12 items-center justify-center rounded-full ${action.color}`}>
+                  <action.icon className="h-6 w-6" />
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-muted-foreground">{student.documentsUploaded}/3 docs</span>
-                  {statusBadge(student.status)}
+                <div className="space-y-1">
+                  <h3 className="font-semibold text-sm">{action.title}</h3>
+                  <p className="text-xs text-muted-foreground leading-tight">{action.description}</p>
                 </div>
-              </div>
+              </button>
             ))}
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+
+        {/* Recent Activity */}
+        <Card className="lg:col-span-3">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-base font-semibold">Recent Students</CardTitle>
+              <CardDescription>Most recent student updates</CardDescription>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => navigate("/students")}>
+              View All <ArrowRight className="ml-1 h-3 w-3" />
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {loading ? (
+                <div className="text-center py-4 text-muted-foreground">Loading recent activity...</div>
+              ) : recentActivity.length > 0 ? (
+                recentActivity.map((activity, i) => (
+                  <div key={i} className="flex items-center justify-between border-b pb-3 last:border-0 last:pb-0">
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">{activity.student}</p>
+                      <p className="text-xs text-muted-foreground">{activity.cin} — {activity.time}</p>
+                    </div>
+                    <Badge variant={activity.status === "verified" ? "success" : activity.status === "mismatch" ? "destructive" : "secondary"}>
+                      {activity.status}
+                    </Badge>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-4 text-muted-foreground">No recent activity</div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };

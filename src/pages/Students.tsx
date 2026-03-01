@@ -1,109 +1,160 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { useState, useEffect } from "react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { mockStudents } from "@/lib/mock-data";
-import { Search } from "lucide-react";
-
-const statusBadge = (status: string) => {
-  switch (status) {
-    case "verified": return <Badge className="bg-success/15 text-success border-0">Verified</Badge>;
-    case "mismatch": return <Badge className="bg-warning/15 text-warning border-0">Mismatch</Badge>;
-    case "pending": return <Badge variant="secondary">Pending</Badge>;
-    case "missing": return <Badge variant="destructive">Missing</Badge>;
-    default: return null;
-  }
-};
+import { Search, Filter, ArrowUpDown, MoreHorizontal, User } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { apiService, Student } from "@/lib/api-service";
+import { toast } from "sonner";
 
 const Students = () => {
-  const [search, setSearch] = useState("");
-  const [filterFiliere, setFilterFiliere] = useState("all");
-  const [filterStatus, setFilterStatus] = useState("all");
   const navigate = useNavigate();
+  const [students, setStudents] = useState<Student[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [loading, setLoading] = useState(true);
 
-  const filieres = [...new Set(mockStudents.map(s => s.filiere))];
+  useEffect(() => {
+    const getStudents = async () => {
+      try {
+        const data = await apiService.fetchStudents();
+        setStudents(data);
+      } catch (error) {
+        toast.error("Failed to load students from database");
+        console.error(error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    getStudents();
+  }, []);
 
-  const filtered = mockStudents.filter(s => {
-    const matchSearch = s.fullName.toLowerCase().includes(search.toLowerCase()) ||
-      s.cin.toLowerCase().includes(search.toLowerCase());
-    const matchFiliere = filterFiliere === "all" || s.filiere === filterFiliere;
-    const matchStatus = filterStatus === "all" || s.status === filterStatus;
-    return matchSearch && matchFiliere && matchStatus;
+  const filteredStudents = students.filter(s => {
+    const matchesSearch = s.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          s.cin.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === "all" || s.status === statusFilter;
+    return matchesSearch && matchesStatus;
   });
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "verified": return <Badge variant="success">Verified</Badge>;
+      case "mismatch": return <Badge variant="destructive">Mismatch</Badge>;
+      case "pending": return <Badge variant="secondary">Pending</Badge>;
+      case "missing": return <Badge variant="outline">Missing Docs</Badge>;
+      default: return <Badge variant="secondary">{status}</Badge>;
+    }
+  };
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Students</h1>
-          <p className="text-muted-foreground">Manage and verify student records</p>
+          <h1 className="text-2xl font-bold tracking-tight">Student Directory</h1>
+          <p className="text-muted-foreground">Manage and monitor all student verification statuses</p>
         </div>
-        <Button onClick={() => navigate("/import")}>Import from Excel</Button>
+        <Button onClick={() => navigate("/import")}>Import New Students</Button>
       </div>
 
-      {/* Filters */}
       <Card>
-        <CardContent className="flex flex-wrap items-center gap-4 p-4">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Search by name or CIN..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+        <CardHeader className="pb-3">
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by name or CIN..."
+                className="pl-9"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[180px]">
+                  <Filter className="mr-2 h-4 w-4" />
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="verified">Verified</SelectItem>
+                  <SelectItem value="mismatch">Mismatch</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="missing">Missing Docs</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          <Select value={filterFiliere} onValueChange={setFilterFiliere}>
-            <SelectTrigger className="w-[200px]"><SelectValue placeholder="Filière" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Filières</SelectItem>
-              {filieres.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={filterStatus} onValueChange={setFilterStatus}>
-            <SelectTrigger className="w-[160px]"><SelectValue placeholder="Status" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="verified">Verified</SelectItem>
-              <SelectItem value="mismatch">Mismatch</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="missing">Missing</SelectItem>
-            </SelectContent>
-          </Select>
-        </CardContent>
-      </Card>
-
-      {/* Table */}
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>CIN</TableHead>
-                <TableHead>Filière</TableHead>
-                <TableHead>Classe</TableHead>
-                <TableHead>Docs</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map(s => (
-                <TableRow key={s.id} className="cursor-pointer" onClick={() => navigate(`/students/${s.id}`)}>
-                  <TableCell className="font-medium">{s.fullName}</TableCell>
-                  <TableCell>{s.cin}</TableCell>
-                  <TableCell>{s.filiere}</TableCell>
-                  <TableCell>{s.classe} - {s.group}</TableCell>
-                  <TableCell>{s.documentsUploaded}/3</TableCell>
-                  <TableCell>{statusBadge(s.status)}</TableCell>
-                </TableRow>
-              ))}
-              {filtered.length === 0 && (
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-md border overflow-hidden">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">No students found</TableCell>
+                  <TableHead className="w-[250px]">
+                    <div className="flex items-center gap-2">Student <ArrowUpDown className="h-3 w-3" /></div>
+                  </TableHead>
+                  <TableHead>CIN</TableHead>
+                  <TableHead>Filière / Classe</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Docs</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-8">Loading students...</TableCell>
+                  </TableRow>
+                ) : filteredStudents.length > 0 ? (
+                  filteredStudents.map((student) => (
+                    <TableRow key={student.id} className="cursor-pointer" onClick={() => navigate(`/student/${student.cin}`)}>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
+                            <User className="h-4 w-4" />
+                          </div>
+                          <span className="font-medium">{student.fullName}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">{student.cin}</TableCell>
+                      <TableCell>
+                        <div className="text-xs">
+                          <p className="font-semibold">{student.filiere}</p>
+                          <p className="text-muted-foreground">{student.classe}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>{getStatusBadge(student.status)}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <div className="h-1.5 w-12 rounded-full bg-muted">
+                            <div
+                              className="h-full rounded-full bg-primary"
+                              style={{ width: `${(student.documentsUploaded / 3) * 100}%` }}
+                            />
+                          </div>
+                          <span className="text-xs">{student.documentsUploaded}/3</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="icon">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                      No students found matching your criteria
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </div>

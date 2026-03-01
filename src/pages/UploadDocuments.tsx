@@ -1,170 +1,201 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Upload, FolderOpen, CheckCircle2, AlertCircle } from "lucide-react";
+import { Upload, FolderOpen, CheckCircle2, AlertCircle, FileWarning } from "lucide-react";
+import JSZip from "jszip";
+import { toast } from "sonner";
+import { apiService } from "@/lib/api-service";
 
-interface DetectedFolder {
-  filiere: string;
-  classes: { classe: string; studentCount: number }[];
+interface OCRResult {
+  cin: string;
+  folder: string;
+  is_correct: boolean;
+  verified_name: string | null;
+  errors: { file: string; error: string }[];
+  file_details: { file: string; extracted_name: string | null; raw_data: any }[];
 }
 
 const UploadDocuments = () => {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [folders, setFolders] = useState<DetectedFolder[]>([]);
+  const [results, setResults] = useState<OCRResult[]>([]);
   const [done, setDone] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFolderSelect = () => {
-    // Simulate folder detection
-    setFolders([
-      {
-        filiere: "Développement Digital",
-        classes: [
-          { classe: "DD201", studentCount: 12 },
-          { classe: "DD202", studentCount: 8 },
-        ],
-      },
-      {
-        filiere: "Infrastructure Digitale",
-        classes: [
-          { classe: "ID101", studentCount: 15 },
-          { classe: "ID102", studentCount: 10 },
-        ],
-      },
-      {
-        filiere: "Gestion des Entreprises",
-        classes: [
-          { classe: "GE301", studentCount: 9 },
-          { classe: "GE302", studentCount: 11 },
-        ],
-      },
-    ]);
-    setDone(false);
-    setProgress(0);
+    fileInputRef.current?.click();
   };
 
-  const handleUpload = () => {
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
     setUploading(true);
-    setProgress(0);
-    const interval = setInterval(() => {
-      setProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setUploading(false);
-          setDone(true);
-          return 100;
-        }
-        return prev + 5;
-      });
-    }, 300);
-  };
+    setProgress(10);
+    setResults([]);
+    setDone(false);
 
-  const totalStudents = folders.reduce((sum, f) => sum + f.classes.reduce((s, c) => s + c.studentCount, 0), 0);
+    try {
+      const zip = new JSZip();
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const path = file.webkitRelativePath || file.name;
+        zip.file(path, file);
+      }
+
+      setProgress(30);
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      setProgress(50);
+
+      const formData = new FormData();
+      formData.append("file", zipBlob, "documents.zip");
+
+      const ocrUrl = apiService.getOcrUrl();
+      const response = await fetch(`${ocrUrl}/validate`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to process documents");
+      }
+
+      const ocrResults: OCRResult[] = await response.json();
+      setResults(ocrResults);
+      setProgress(100);
+      setDone(true);
+
+      // Bulk update student statuses in Laravel based on OCR results
+      const statusUpdates = ocrResults.map(res => ({
+        cin: res.cin,
+        status: res.is_correct ? "verified" : "mismatch",
+        documentsUploaded: res.file_details.length
+      }));
+
+      if (statusUpdates.length > 0) {
+        await apiService.bulkUpdateStatus(statusUpdates);
+      }
+
+      toast.success("Documents processed successfully");
+    } catch (error) {
+      console.error("Upload error:", error);
+      toast.error("An error occurred during document processing");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Upload Student Documents</h1>
         <p className="text-muted-foreground">
-          Upload a root folder containing: <code className="rounded bg-muted px-1.5 py-0.5 text-xs">Filière / Classe / Student Documents (images)</code>
+          Upload folder or multiple images containing: <code className="rounded bg-muted px-1.5 py-0.5 text-xs">Filière / Classe / Student Documents (images)</code>
         </p>
       </div>
 
-      {/* Folder structure explanation */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Expected Folder Structure</CardTitle>
-          <CardDescription>Your folder should follow this hierarchy</CardDescription>
+          <CardDescription>Upload a folder where each student has their own sub-folder named with their CIN (e.g., BB123456)</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="rounded-lg bg-muted/50 p-4 font-mono text-sm space-y-1">
             <p className="flex items-center gap-2"><FolderOpen className="h-4 w-4 text-primary" /> 📁 Root Folder/</p>
-            <p className="ml-6 flex items-center gap-2"><FolderOpen className="h-4 w-4 text-primary" /> 📁 Développement Digital/</p>
-            <p className="ml-12 flex items-center gap-2"><FolderOpen className="h-4 w-4 text-primary" /> 📁 DD201/</p>
-            <p className="ml-18 text-muted-foreground">🖼️ BK123456_birth.jpg</p>
-            <p className="ml-18 text-muted-foreground">🖼️ BK123456_bac.jpg</p>
-            <p className="ml-18 text-muted-foreground">🖼️ BK123456_cin.jpg</p>
-            <p className="ml-12 flex items-center gap-2"><FolderOpen className="h-4 w-4 text-primary" /> 📁 DD202/</p>
-            <p className="ml-18 text-muted-foreground">🖼️ ...</p>
-            <p className="ml-6 flex items-center gap-2"><FolderOpen className="h-4 w-4 text-primary" /> 📁 Infrastructure Digitale/</p>
+            <p className="ml-6 flex items-center gap-2"><FolderOpen className="h-4 w-4 text-primary" /> 📁 BB123456/</p>
+            <p className="ml-12 text-muted-foreground">🖼️ birth.jpg</p>
+            <p className="ml-12 text-muted-foreground">🖼️ bac.jpg</p>
+            <p className="ml-12 text-muted-foreground">🖼️ cin.jpg</p>
+            <p className="ml-6 flex items-center gap-2"><FolderOpen className="h-4 w-4 text-primary" /> 📁 CC789012/</p>
             <p className="ml-12 text-muted-foreground">...</p>
           </div>
         </CardContent>
       </Card>
 
-      {/* Upload area */}
       <Card>
         <CardContent className="p-6">
           <div className="flex flex-col items-center gap-4 rounded-xl border-2 border-dashed border-primary/30 bg-primary/5 p-12">
             <Upload className="h-12 w-12 text-primary/60" />
-            <p className="font-medium">Select the root folder containing all student documents</p>
-            <p className="text-sm text-muted-foreground">The system will auto-detect filières, classes, and student files</p>
-            <Button variant="outline" onClick={handleFolderSelect}>
+            <p className="font-medium">Select folder or images to process</p>
+            <p className="text-sm text-muted-foreground">AI will extract and match names automatically</p>
+            <input
+              type="file"
+              ref={fileInputRef}
+              className="hidden"
+              multiple
+              onChange={handleFileChange}
+              {...({ webkitdirectory: "", directory: "" } as any)}
+            />
+            <Button variant="outline" onClick={handleFolderSelect} disabled={uploading}>
               <FolderOpen className="mr-2 h-4 w-4" />
-              Select Folder
+              Select Folder / Files
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* Detected structure */}
-      {folders.length > 0 && (
+      {(uploading || progress > 0) && !done && (
+        <Card>
+          <CardContent className="pt-6 space-y-2">
+            <div className="flex items-center gap-3">
+              <Progress value={progress} className="flex-1" />
+              <span className="text-sm font-medium">{progress}%</span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {progress < 100 ? "Uploading and processing documents with OCR..." : "Processing complete"}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {results.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center justify-between">
-              <span>Detected Structure</span>
-              <Badge variant="secondary">{totalStudents} students found</Badge>
+              <span>OCR Processing Results</span>
+              <Badge variant="secondary">{results.length} students processed</Badge>
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {folders.map(f => (
-              <div key={f.filiere} className="rounded-lg border p-3 space-y-2">
-                <div className="flex items-center gap-2">
-                  <FolderOpen className="h-4 w-4 text-primary" />
-                  <span className="font-semibold text-sm">{f.filiere}</span>
+          <CardContent className="space-y-4">
+            {results.map((res, idx) => (
+              <div key={idx} className={`rounded-lg border p-4 ${res.is_correct ? "bg-green-50/50 border-green-200" : "bg-red-50/50 border-red-200"}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    {res.is_correct ? <CheckCircle2 className="h-5 w-5 text-green-600" /> : <AlertCircle className="h-5 w-5 text-red-600" />}
+                    <span className="font-bold">CIN: {res.cin}</span>
+                  </div>
+                  <Badge variant={res.is_correct ? "success" : "destructive"}>
+                    {res.is_correct ? "Matched" : "Mismatch"}
+                  </Badge>
                 </div>
-                <div className="ml-6 flex flex-wrap gap-2">
-                  {f.classes.map(c => (
-                    <Badge key={c.classe} variant="outline" className="text-xs">
-                      {c.classe} — {c.studentCount} students
-                    </Badge>
+
+                {res.verified_name && (
+                  <p className="text-sm font-medium mb-1 text-green-800">Verified Name: {res.verified_name}</p>
+                )}
+
+                {res.errors.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {res.errors.map((err, i) => (
+                      <p key={i} className="text-xs text-red-700 flex items-center gap-1">
+                        <FileWarning className="h-3 w-3" /> {err.file}: {err.error}
+                      </p>
+                    ))}
+                  </div>
+                )}
+
+                <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2">
+                  {res.file_details.map((detail, i) => (
+                    <div key={i} className="text-xs p-2 rounded bg-white/50 border border-gray-100">
+                      <p className="font-semibold truncate" title={detail.file}>{detail.file}</p>
+                      <p className="text-gray-600">Extracted: {detail.extracted_name || "N/A"}</p>
+                    </div>
                   ))}
                 </div>
               </div>
             ))}
-
-            {!done && (
-              <div className="flex justify-end pt-2">
-                <Button onClick={handleUpload} disabled={uploading}>
-                  <Upload className="mr-2 h-4 w-4" />
-                  Upload & Process All ({totalStudents} students)
-                </Button>
-              </div>
-            )}
-
-            {(uploading || progress > 0) && (
-              <div className="space-y-2 pt-2">
-                <div className="flex items-center gap-3">
-                  <Progress value={progress} className="flex-1" />
-                  <span className="text-sm font-medium">{progress}%</span>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {progress < 100 ? "Uploading and processing documents with OCR..." : ""}
-                </p>
-              </div>
-            )}
-
-            {done && (
-              <div className="flex items-center gap-3 rounded-lg bg-success/10 p-4">
-                <CheckCircle2 className="h-5 w-5 text-success" />
-                <div>
-                  <p className="font-semibold text-sm">Upload Complete!</p>
-                  <p className="text-xs text-muted-foreground">{totalStudents} student documents processed. Check the Mismatched and Verified pages for results.</p>
-                </div>
-              </div>
-            )}
           </CardContent>
         </Card>
       )}
