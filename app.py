@@ -3,6 +3,7 @@ from glob import glob
 from doctr.io import DocumentFile
 from doctr.models import ocr_predictor
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import zipfile
 import tempfile
 import re
@@ -115,6 +116,7 @@ def process_image(image_path):
 
 # Flask Application
 app = Flask(__name__)
+CORS(app)
 
 
 @app.route('/validate', methods=['POST'])
@@ -133,7 +135,13 @@ def validate_folder():
 
     try:
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(extract_dir)
+            for member in zip_ref.infolist():
+                # Check for Zip Slip vulnerability
+                target_path = os.path.normpath(os.path.join(extract_dir, member.filename))
+                if not target_path.startswith(os.path.abspath(extract_dir) + os.sep) and \
+                   target_path != os.path.abspath(extract_dir):
+                    continue
+                zip_ref.extract(member, extract_dir)
 
         results = []
         # Find all directories that contain images, or the root if it contains images
