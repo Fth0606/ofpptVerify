@@ -153,7 +153,7 @@ const ImportExcel = () => {
       {imported && (
         <Card>
           <CardContent className="flex flex-col items-center gap-3 py-12">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-150">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
               <Check className="h-6 w-6 text-green-600" />
             </div>
             <p className="font-semibold">Import Successful!</p>

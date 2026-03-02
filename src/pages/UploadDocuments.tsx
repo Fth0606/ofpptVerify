@@ -65,7 +65,17 @@ const UploadDocuments = () => {
         throw new Error("Failed to process documents");
       }
 
-      const ocrResults: OCRResult[] = await response.json();
+      const rawResponse = await response.json();
+
+      if (rawResponse.error) {
+        throw new Error(rawResponse.error);
+      }
+
+      if (!Array.isArray(rawResponse)) {
+        throw new Error("Invalid response format from OCR service");
+      }
+
+      const ocrResults: OCRResult[] = rawResponse;
 
       // Get all students from database to verify names
       const allStudents = await apiService.fetchStudents();
@@ -112,9 +122,13 @@ const UploadDocuments = () => {
       }
 
       toast.success("Documents processed successfully");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Upload error:", error);
-      toast.error("An error occurred during document processing");
+      if (error.message === "Failed to fetch") {
+        toast.error("Could not connect to OCR service. Please ensure the Python backend is running on port 5000.");
+      } else {
+        toast.error(`Error: ${error.message || "An error occurred during document processing"}`);
+      }
     } finally {
       setUploading(false);
     }

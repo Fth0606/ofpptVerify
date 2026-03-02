@@ -116,8 +116,12 @@ def process_image(image_path):
 
 # Flask Application
 app = Flask(__name__)
-CORS(app)
+# Use a clean CORS configuration
+CORS(app, resources={r"/*": {"origins": "*"}})
 
+@app.route('/ping', methods=['GET'])
+def ping():
+    return jsonify({"status": "ok", "message": "OCR Service is running"})
 
 @app.route('/validate', methods=['POST'])
 def validate_folder():
@@ -221,4 +225,5 @@ def validate_folder():
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    # Changed to 5001 to avoid common system conflicts
+    app.run(host='0.0.0.0', port=5001)
