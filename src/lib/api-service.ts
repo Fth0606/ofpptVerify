@@ -1,5 +1,5 @@
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
-const OCR_URL = import.meta.env.VITE_OCR_URL || "http://localhost:5000";
+const OCR_URL = import.meta.env.VITE_OCR_URL || "http://localhost:5001";
 const API_TOKEN = import.meta.env.VITE_API_TOKEN || "default-token-123";
 
 export interface Student {

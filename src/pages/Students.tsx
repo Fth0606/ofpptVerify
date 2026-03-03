@@ -33,7 +33,7 @@ const Students = () => {
   }, []);
 
   const filteredStudents = students.filter(s => {
-    const matchesSearch = s.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const matchesSearch = s.fullName.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           s.cin.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === "all" || s.status === statusFilter;
     return matchesSearch && matchesStatus;
@@ -110,7 +110,7 @@ const Students = () => {
                   </TableRow>
                 ) : filteredStudents.length > 0 ? (
                   filteredStudents.map((student) => (
-                    <TableRow key={student.id} className="cursor-pointer" onClick={() => navigate(`/student/${student.cin}`)}>
+                    <TableRow key={student.id} className="cursor-pointer" onClick={() => navigate(`/students/${student.id}`)}>
                       <TableCell>
                         <div className="flex items-center gap-3">
                           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -130,8 +130,8 @@ const Students = () => {
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <div className="h-1.5 w-12 rounded-full bg-muted">
-                            <div
-                              className="h-full rounded-full bg-primary"
+                            <div 
+                              className="h-full rounded-full bg-primary" 
                               style={{ width: `${(student.documentsUploaded / 3) * 100}%` }}
                             />
                           </div>

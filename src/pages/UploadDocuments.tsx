@@ -13,6 +13,8 @@ interface OCRResult {
   folder: string;
   is_correct: boolean;
   verified_name: string | null;
+  student_name?: string;
+  db_mismatch?: boolean;
   errors: { file: string; error: string }[];
   file_details: { file: string; extracted_name: string | null; raw_data: any }[];
 }
@@ -39,7 +41,7 @@ const UploadDocuments = () => {
 
     try {
       const zip = new JSZip();
-
+      
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const path = file.webkitRelativePath || file.name;
@@ -63,13 +65,53 @@ const UploadDocuments = () => {
         throw new Error("Failed to process documents");
       }
 
-      const ocrResults: OCRResult[] = await response.json();
-      setResults(ocrResults);
+      const rawResponse = await response.json();
+      
+      if (rawResponse.error) {
+        throw new Error(rawResponse.error);
+      }
+      
+      if (!Array.isArray(rawResponse)) {
+        throw new Error("Invalid response format from OCR service");
+      }
+
+      const ocrResults: OCRResult[] = rawResponse;
+      
+      // Get all students from database to verify names
+      const allStudents = await apiService.fetchStudents();
+      
+      const enhancedResults = ocrResults.map(res => {
+        const student = allStudents.find(s => s.cin.toLowerCase() === res.cin.toLowerCase());
+        let finalCorrect = res.is_correct;
+        let dbMismatch = false;
+        
+        if (student && res.verified_name) {
+          // Clean up names for comparison
+          const cleanOcrName = res.verified_name.toLowerCase().replace(/\s/g, '');
+          const cleanDbName = student.fullName.toLowerCase().replace(/\s/g, '');
+          
+          if (!cleanOcrName.includes(cleanDbName) && !cleanDbName.includes(cleanOcrName)) {
+            finalCorrect = false;
+            dbMismatch = true;
+          }
+        } else if (!student) {
+          finalCorrect = false;
+        }
+
+        return {
+          ...res,
+          is_correct: finalCorrect,
+          db_mismatch: dbMismatch,
+          student_name: student?.fullName
+        };
+      });
+
+      setResults(enhancedResults);
       setProgress(100);
       setDone(true);
-
+      
       // Bulk update student statuses in Laravel based on OCR results
-      const statusUpdates = ocrResults.map(res => ({
+      const statusUpdates = enhancedResults.map(res => ({
         cin: res.cin,
         status: res.is_correct ? "verified" : "mismatch",
         documentsUploaded: res.file_details.length
@@ -78,11 +120,15 @@ const UploadDocuments = () => {
       if (statusUpdates.length > 0) {
         await apiService.bulkUpdateStatus(statusUpdates);
       }
-
+      
       toast.success("Documents processed successfully");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Upload error:", error);
-      toast.error("An error occurred during document processing");
+      if (error.message === "Failed to fetch") {
+        toast.error("Could not connect to OCR service. Please ensure the Python backend is running on port 5000.");
+      } else {
+        toast.error(`Error: ${error.message || "An error occurred during document processing"}`);
+      }
     } finally {
       setUploading(false);
     }
@@ -171,9 +217,32 @@ const UploadDocuments = () => {
                     {res.is_correct ? "Matched" : "Mismatch"}
                   </Badge>
                 </div>
+                
+                <div className="text-sm font-medium mb-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {res.verified_name && (
+                    <div className="p-2 rounded bg-white/50 border">
+                      <p className="text-xs text-muted-foreground">Extracted from Docs:</p>
+                      <p className="text-green-800">{res.verified_name}</p>
+                    </div>
+                  )}
+                  {res.student_name && (
+                    <div className="p-2 rounded bg-white/50 border">
+                      <p className="text-xs text-muted-foreground">Database Record:</p>
+                      <p className="text-blue-800">{res.student_name}</p>
+                    </div>
+                  )}
+                </div>
 
-                {res.verified_name && (
-                  <p className="text-sm font-medium mb-1 text-green-800">Verified Name: {res.verified_name}</p>
+                {res.db_mismatch && (
+                  <p className="text-xs text-red-600 font-bold mb-2 flex items-center gap-1">
+                    <FileWarning className="h-3 w-3" /> Data mismatch: Document name does not match database record
+                  </p>
+                )}
+
+                {!res.student_name && (
+                   <p className="text-xs text-amber-600 font-bold mb-2 flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" /> Warning: No student found in database with CIN {res.cin}
+                  </p>
                 )}
 
                 {res.errors.length > 0 && (
@@ -185,7 +254,7 @@ const UploadDocuments = () => {
                     ))}
                   </div>
                 )}
-
+                
                 <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2">
                   {res.file_details.map((detail, i) => (
                     <div key={i} className="text-xs p-2 rounded bg-white/50 border border-gray-100">

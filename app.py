@@ -3,6 +3,7 @@ from glob import glob
 from doctr.io import DocumentFile
 from doctr.models import ocr_predictor
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import zipfile
 import tempfile
 import re
@@ -115,7 +116,12 @@ def process_image(image_path):
 
 # Flask Application
 app = Flask(__name__)
+# Use a clean CORS configuration
+CORS(app, resources={r"/*": {"origins": "*"}})
 
+@app.route('/ping', methods=['GET'])
+def ping():
+    return jsonify({"status": "ok", "message": "OCR Service is running"})
 
 @app.route('/validate', methods=['POST'])
 def validate_folder():
@@ -133,12 +139,18 @@ def validate_folder():
 
     try:
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(extract_dir)
+            for member in zip_ref.infolist():
+                # Check for Zip Slip vulnerability
+                target_path = os.path.normpath(os.path.join(extract_dir, member.filename))
+                if not target_path.startswith(os.path.abspath(extract_dir) + os.sep) and \
+                   target_path != os.path.abspath(extract_dir):
+                    continue
+                zip_ref.extract(member, extract_dir)
 
         results = []
         # Find all directories that contain images, or the root if it contains images
         walk_data = list(os.walk(extract_dir))
-
+        
         for root, dirs, files in walk_data:
             image_paths = []
             for ext in ['*.png', '*.jpg', '*.jpeg']:
@@ -150,7 +162,7 @@ def validate_folder():
 
             # This directory has images, treat it as a student folder
             subdir = os.path.relpath(root, extract_dir)
-
+            
             extracted_names = []
             file_details = []
 
@@ -213,4 +225,5 @@ def validate_folder():
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    # Changed to 5001 to avoid common system conflicts
+    app.run(host='0.0.0.0', port=5001)
