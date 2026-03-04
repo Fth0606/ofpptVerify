@@ -25,12 +25,17 @@ const UploadDocuments = () => {
   const [results, setResults] = useState<OCRResult[]>([]);
   const [done, setDone] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const zipInputRef = useRef<HTMLInputElement>(null);
 
   const handleFolderSelect = () => {
     fileInputRef.current?.click();
   };
 
-  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleZipSelect = () => {
+    zipInputRef.current?.click();
+  };
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>, isZip = false) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
@@ -40,20 +45,25 @@ const UploadDocuments = () => {
     setDone(false);
 
     try {
-      const zip = new JSZip();
-      
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const path = file.webkitRelativePath || file.name;
-        zip.file(path, file);
+      let zipBlob: Blob;
+
+      if (isZip) {
+        zipBlob = files[0];
+        setProgress(50);
+      } else {
+        const zip = new JSZip();
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          const path = file.webkitRelativePath || file.name;
+          zip.file(path, file);
+        }
+        setProgress(30);
+        zipBlob = await zip.generateAsync({ type: "blob" });
+        setProgress(50);
       }
 
-      setProgress(30);
-      const zipBlob = await zip.generateAsync({ type: "blob" });
-      setProgress(50);
-
       const formData = new FormData();
-      formData.append("file", zipBlob, "documents.zip");
+      formData.append("file", zipBlob, isZip ? files[0].name : "documents.zip");
 
       const ocrUrl = apiService.getOcrUrl();
       const response = await fetch(`${ocrUrl}/validate`, {
@@ -66,31 +76,37 @@ const UploadDocuments = () => {
       }
 
       const rawResponse = await response.json();
-      
+
       if (rawResponse.error) {
         throw new Error(rawResponse.error);
       }
-      
+
       if (!Array.isArray(rawResponse)) {
         throw new Error("Invalid response format from OCR service");
       }
 
       const ocrResults: OCRResult[] = rawResponse;
-      
+
+
       // Get all students from database to verify names
       const allStudents = await apiService.fetchStudents();
-      
+
       const enhancedResults = ocrResults.map(res => {
         const student = allStudents.find(s => s.cin.toLowerCase() === res.cin.toLowerCase());
         let finalCorrect = res.is_correct;
         let dbMismatch = false;
-        
+
+
         if (student && res.verified_name) {
           // Clean up names for comparison
-          const cleanOcrName = res.verified_name.toLowerCase().replace(/\s/g, '');
-          const cleanDbName = student.fullName.toLowerCase().replace(/\s/g, '');
-          
-          if (!cleanOcrName.includes(cleanDbName) && !cleanDbName.includes(cleanOcrName)) {
+          const ocrWords = res.verified_name.toLowerCase().split(/\s+/).filter(w => w.length > 1);
+          const dbWords = student.fullName.toLowerCase().split(/\s+/).filter(w => w.length > 1);
+
+          // All words in DB name should ideally be in OCR name
+          const missingWords = dbWords.filter(dbW => !ocrWords.some(ocrW => ocrW.includes(dbW) || dbW.includes(ocrW)));
+
+          // Strict check: if missing any word or if word counts are too different
+          if (missingWords.length > 0 || ocrWords.length < 2) {
             finalCorrect = false;
             dbMismatch = true;
           }
@@ -109,7 +125,7 @@ const UploadDocuments = () => {
       setResults(enhancedResults);
       setProgress(100);
       setDone(true);
-      
+
       // Bulk update student statuses in Laravel based on OCR results
       const statusUpdates = enhancedResults.map(res => ({
         cin: res.cin,
@@ -120,12 +136,12 @@ const UploadDocuments = () => {
       if (statusUpdates.length > 0) {
         await apiService.bulkUpdateStatus(statusUpdates);
       }
-      
+
       toast.success("Documents processed successfully");
     } catch (error: any) {
       console.error("Upload error:", error);
       if (error.message === "Failed to fetch") {
-        toast.error("Could not connect to OCR service. Please ensure the Python backend is running on port 5000.");
+        toast.error("Could not connect to OCR service. Please ensure the Python backend is running on port 5001.");
       } else {
         toast.error(`Error: ${error.message || "An error occurred during document processing"}`);
       }
@@ -172,13 +188,26 @@ const UploadDocuments = () => {
               ref={fileInputRef}
               className="hidden"
               multiple
-              onChange={handleFileChange}
+              onChange={(e) => handleFileChange(e, false)}
               {...({ webkitdirectory: "", directory: "" } as any)}
             />
-            <Button variant="outline" onClick={handleFolderSelect} disabled={uploading}>
-              <FolderOpen className="mr-2 h-4 w-4" />
-              Select Folder / Files
-            </Button>
+            <input
+              type="file"
+              ref={zipInputRef}
+              className="hidden"
+              accept=".zip"
+              onChange={(e) => handleFileChange(e, true)}
+            />
+            <div className="flex flex-wrap gap-3 justify-center">
+              <Button variant="outline" onClick={handleFolderSelect} disabled={uploading}>
+                <FolderOpen className="mr-2 h-4 w-4" />
+                Select Folder
+              </Button>
+              <Button variant="outline" onClick={handleZipSelect} disabled={uploading}>
+                <Upload className="mr-2 h-4 w-4" />
+                Select ZIP File
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -217,7 +246,7 @@ const UploadDocuments = () => {
                     {res.is_correct ? "Matched" : "Mismatch"}
                   </Badge>
                 </div>
-                
+
                 <div className="text-sm font-medium mb-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {res.verified_name && (
                     <div className="p-2 rounded bg-white/50 border">
@@ -240,7 +269,7 @@ const UploadDocuments = () => {
                 )}
 
                 {!res.student_name && (
-                   <p className="text-xs text-amber-600 font-bold mb-2 flex items-center gap-1">
+                  <p className="text-xs text-amber-600 font-bold mb-2 flex items-center gap-1">
                     <AlertCircle className="h-3 w-3" /> Warning: No student found in database with CIN {res.cin}
                   </p>
                 )}
@@ -254,7 +283,7 @@ const UploadDocuments = () => {
                     ))}
                   </div>
                 )}
-                
+
                 <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2">
                   {res.file_details.map((detail, i) => (
                     <div key={i} className="text-xs p-2 rounded bg-white/50 border border-gray-100">

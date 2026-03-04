@@ -2,13 +2,32 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { mockStudents, groupByFiliereClasse } from "@/lib/mock-data";
+import { groupByFiliereClasse } from "@/lib/mock-data";
 import { exportVerifiedToExcel, exportVerifiedToPDF } from "@/lib/export-utils";
 import { CheckCircle2, FileDown, FileSpreadsheet } from "lucide-react";
+import { useState, useEffect } from "react";
+import { apiService, Student } from "@/lib/api-service";
+import { toast } from "sonner";
 
 const CorrectStudents = () => {
-  const verifiedStudents = mockStudents.filter(s => s.status === "verified");
-  const grouped = groupByFiliereClasse(verifiedStudents);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchStudents = async () => {
+      try {
+        const data = await apiService.fetchStudents();
+        setStudents(data.filter(s => s.status === "verified"));
+      } catch (error) {
+        toast.error("Failed to load verified students");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchStudents();
+  }, []);
+
+  const grouped = groupByFiliereClasse(students);
 
   return (
     <div className="space-y-6">
@@ -20,12 +39,12 @@ const CorrectStudents = () => {
           </h1>
           <p className="text-muted-foreground">Students whose document data matches Excel records, grouped by filière and classe</p>
         </div>
-        {verifiedStudents.length > 0 && (
+        {students.length > 0 && (
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => exportVerifiedToExcel(verifiedStudents)}>
+            <Button variant="outline" size="sm" onClick={() => exportVerifiedToExcel(students)}>
               <FileSpreadsheet className="mr-2 h-4 w-4" />Excel
             </Button>
-            <Button variant="outline" size="sm" onClick={() => exportVerifiedToPDF(verifiedStudents)}>
+            <Button variant="outline" size="sm" onClick={() => exportVerifiedToPDF(students)}>
               <FileDown className="mr-2 h-4 w-4" />PDF
             </Button>
           </div>

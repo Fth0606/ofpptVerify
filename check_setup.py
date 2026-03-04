@@ -9,7 +9,8 @@ def check_service(name, url):
         else:
             # Laravel root or simple endpoint
             response = requests.get(url, timeout=5)
-            
+
+
         if response.status_code == 200:
             print(f"✅ {name} is reachable!")
             if name == "OCR Service":
@@ -21,10 +22,12 @@ def check_service(name, url):
 
 if __name__ == "__main__":
     print("--- System Connectivity Check ---")
-    check_service("OCR Service", "http://localhost:5000")
+
+    check_service("OCR Service", "http://localhost:5001")
     check_service("Laravel Backend", "http://localhost:8000")
     print("---------------------------------")
     print("If OCR Service is failing:")
     print("1. Ensure 'python app.py' is running.")
     print("2. Ensure 'pip install flask flask-cors' was successful.")
-    print("3. Check for any firewall/antivirus blocking port 5000.")
+
+    print("3. Check for any firewall/antivirus blocking port 5001.")

@@ -19,35 +19,66 @@ keywords = ["Prénom", "Nom", "Le candidat(e)"]
 
 def normalize_value(value):
     """Clean and normalize extracted values."""
-    value = value.replace(":", "").strip()
-    return value
+    if not value:
+        return ""
+    # Remove common separators and clean whitespace
+    value = re.sub(r'[:;=_-]', '', value)
+    return value.strip()
 
 
 def reformat_name(name_info):
     """Reformat names into a consistent format."""
     if not name_info:
         return None
-    if "Prénom" in name_info and "Nom" in name_info:
-        return f"{normalize_value(name_info['Prénom'])} {normalize_value(name_info['Nom'])}"
+    
+    # Priority 1: Nom and Prénom (Full combination)
+    prenom = name_info.get("Prénom") or name_info.get("First Name") or name_info.get("Prenom")
+    nom = name_info.get("Nom") or name_info.get("Last Name") or name_info.get("Surname")
+    
+    if prenom and nom:
+        return f"{normalize_value(prenom)} {normalize_value(nom)}"
+    
+    # Priority 2: Full name from candidate line
     elif "Le candidat(e)" in name_info:
         full_name = normalize_value(name_info["Le candidat(e)"])
         parts = full_name.split()
         if len(parts) == 2:
             return f"{parts[1]} {parts[0]}"
         return full_name
+    
+    # Priority 3: Combine whatever we found
+    parts = []
+    if prenom: parts.append(normalize_value(prenom))
+    if nom: parts.append(normalize_value(nom))
+    
+    if parts:
+        return " ".join(parts)
+        
     return None
 
 
 def extract_names(text, keywords):
-    """Extract names using keywords."""
+    """Extract names using keywords (case-insensitive)."""
     name_info = {}
     lines = text.split("\n")
 
+    # Expanded keyword patterns for common OCR errors
+    patterns = {
+        "Nom": r'(?i)Nom|Last\s*Name|Surname',
+        "Prénom": r'(?i)Pr[ée]no[mn]|First\s*Name',
+        "Le candidat(e)": r'(?i)Le\s*candidat\(e\)'
+    }
+
     for line in lines:
-        for keyword in keywords:
-            if keyword in line:
-                value = line.split(keyword)[-1].strip()
-                name_info[keyword] = value
+        for key, pattern in patterns.items():
+            match = re.search(pattern, line)
+            if match:
+                # Get everything after the keyword (until end of line or another field)
+                value = line[match.end():].strip()
+                # Clean colon and whitespace
+                value = re.sub(r'[:\s=]+', ' ', value).strip()
+                if value and len(value) > 2: # Ignore noise
+                    name_info[key] = value
                 break
 
     return name_info
@@ -66,6 +97,23 @@ def extract_capital_words(result):
     return capital_words
 
 
+def extract_names_regex(text):
+    """Extract names using regex patterns as fallback."""
+    name_info = {}
+    
+    # Pattern for "Nom: VALUE" or "Nom VALUE"
+    nom_match = re.search(r'(?i)(?:nom|name)\s*[:\s]+([A-Z\s]{2,})', text)
+    if nom_match:
+        name_info['Nom'] = nom_match.group(1).strip()
+        
+    # Pattern for "Prénom: VALUE"
+    prenom_match = re.search(r'(?i)(?:pr[ée]nom|first\s*name)\s*[:\s]+([A-Z\s]{2,})', text)
+    if prenom_match:
+        name_info['Prénom'] = prenom_match.group(1).strip()
+        
+    return name_info
+
+
 def process_image(image_path):
     """Process individual image for name extraction."""
     try:
@@ -74,23 +122,15 @@ def process_image(image_path):
         result = model(doc)
         extracted_text = result.render()
 
-        # First attempt: Extract names using keywords
+        # 1. Attempt: Extract names using keywords
         name_info = extract_names(extracted_text, keywords)
 
-        if name_info:
-            return name_info
-        else:
-            # Fallback: Extract capitalized words
-            capital_words = extract_capital_words(result)
+        if not name_info:
+            # 2. Attempt: Regex patterns
+            name_info = extract_names_regex(extracted_text)
 
-            # Check if there are enough capitalized words
-            if len(capital_words) >= 7:
-                return {
-                    "Prénom": capital_words[5],
-                    "Nom": capital_words[6]
-                }
-
-            # Additional fallback: Look for patterns in the text
+        if not name_info:
+            # 3. Attempt: Look for patterns in the text lines
             lines = extracted_text.split('\n')
             for i, line in enumerate(lines):
                 if ':' in line:
@@ -105,8 +145,16 @@ def process_image(image_path):
                 if 'candidat' in line.lower() and i + 1 < len(lines):
                     name_info['Le candidat(e)'] = lines[i + 1].strip()
 
-            if name_info:
-                return name_info
+        if name_info:
+            return name_info
+            
+        # 4. Fallback: Extract capitalized words (last resort)
+        capital_words = extract_capital_words(result)
+        if len(capital_words) >= 7:
+            return {
+                "Prénom": capital_words[5],
+                "Nom": capital_words[6]
+            }
 
     except Exception as e:
         print(f"Error processing {image_path}: {e}")

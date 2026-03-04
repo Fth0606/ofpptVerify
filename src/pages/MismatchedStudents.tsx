@@ -2,10 +2,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { mockStudents, mockMismatches, groupByFiliereClasse, type StudentMismatch } from "@/lib/mock-data";
+import { groupByFiliereClasse, type StudentMismatch } from "@/lib/mock-data";
 import { exportMismatchedToExcel, exportMismatchedToPDF } from "@/lib/export-utils";
 import { AlertTriangle, ChevronDown, ChevronUp, FileDown, FileSpreadsheet } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { apiService, Student } from "@/lib/api-service";
+import { toast } from "sonner";
 
 const docLabel = (doc: string) => {
   switch (doc) {
@@ -17,12 +19,28 @@ const docLabel = (doc: string) => {
 };
 
 const MismatchedStudents = () => {
-  const mismatchStudents = mockStudents.filter(s => s.status === "mismatch");
-  const grouped = groupByFiliereClasse(mismatchStudents);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(true);
   const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
 
+  useEffect(() => {
+    const fetchStudents = async () => {
+      try {
+        const data = await apiService.fetchStudents();
+        setStudents(data.filter(s => s.status === "mismatch"));
+      } catch (error) {
+        toast.error("Failed to load mismatched students");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchStudents();
+  }, []);
+
+  const grouped = groupByFiliereClasse(students);
+
   const getMismatches = (studentId: string): StudentMismatch | undefined =>
-    mockMismatches.find(m => m.student.id === studentId);
+    undefined; // Temporarily disabled persistence for mismatch details
 
   return (
     <div className="space-y-6">
@@ -34,12 +52,12 @@ const MismatchedStudents = () => {
           </h1>
           <p className="text-muted-foreground">Students whose document data differs from Excel records, grouped by filière and classe</p>
         </div>
-        {mismatchStudents.length > 0 && (
+        {students.length > 0 && (
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => exportMismatchedToExcel(mismatchStudents, mockMismatches)}>
+            <Button variant="outline" size="sm" onClick={() => exportMismatchedToExcel(students, [])}>
               <FileSpreadsheet className="mr-2 h-4 w-4" />Excel
             </Button>
-            <Button variant="outline" size="sm" onClick={() => exportMismatchedToPDF(mismatchStudents, mockMismatches)}>
+            <Button variant="outline" size="sm" onClick={() => exportMismatchedToPDF(students, [])}>
               <FileDown className="mr-2 h-4 w-4" />PDF
             </Button>
           </div>
