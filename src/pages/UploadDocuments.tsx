@@ -99,14 +99,18 @@ const UploadDocuments = () => {
 
         if (student && res.verified_name) {
           // Clean up names for comparison
-          const ocrWords = res.verified_name.toLowerCase().split(/\s+/).filter(w => w.length > 1);
-          const dbWords = student.fullName.toLowerCase().split(/\s+/).filter(w => w.length > 1);
+          const dbFull = student.fullName.toLowerCase();
+          const ocrFull = res.verified_name.toLowerCase();
 
-          // All words in DB name should ideally be in OCR name
+          // Set-based comparison for order independence
+          const dbWords = dbFull.split(/\s+/).filter(w => w.length > 1);
+          const ocrWords = ocrFull.split(/\s+/).filter(w => w.length > 1);
+
           const missingWords = dbWords.filter(dbW => !ocrWords.some(ocrW => ocrW.includes(dbW) || dbW.includes(ocrW)));
+          const extraWords = ocrWords.filter(ocrW => !dbWords.some(dbW => dbW.includes(ocrW) || ocrW.includes(dbW)));
 
-          // Strict check: if missing any word or if word counts are too different
-          if (missingWords.length > 0 || ocrWords.length < 2) {
+          // It's a match if all DB words are there, and not too many extra words are added
+          if (missingWords.length > 0 || (ocrWords.length < 2 && dbWords.length >= 2)) {
             finalCorrect = false;
             dbMismatch = true;
           }
@@ -114,11 +118,28 @@ const UploadDocuments = () => {
           finalCorrect = false;
         }
 
+        const mismatches = (res.errors || []).map(e => ({
+          document: "ocr_process",
+          field: "Name/OCR",
+          excelValue: student?.fullName || "Not found",
+          ocrValue: e.error
+        }));
+
+        if (dbMismatch && student && res.verified_name) {
+          mismatches.push({
+            document: "verification",
+            field: "Full Name",
+            excelValue: student.fullName,
+            ocrValue: res.verified_name
+          });
+        }
+
         return {
           ...res,
           is_correct: finalCorrect,
           db_mismatch: dbMismatch,
-          student_name: student?.fullName
+          student_name: student?.fullName,
+          mismatch_details: mismatches
         };
       });
 
@@ -127,11 +148,24 @@ const UploadDocuments = () => {
       setDone(true);
 
       // Bulk update student statuses in Laravel based on OCR results
-      const statusUpdates = enhancedResults.map(res => ({
-        cin: res.cin,
-        status: res.is_correct ? "verified" : "mismatch",
-        documentsUploaded: res.file_details.length
-      }));
+      const statusUpdates = enhancedResults.map(res => {
+        // Try to guess document types from file details
+        const fileData = res.file_details.reduce((acc: any, detail) => {
+          const name = detail.file.toLowerCase();
+          if (name.includes("cin") || name.includes("id")) acc.cin = detail.file;
+          else if (name.includes("bac")) acc.baccalaureate = detail.file;
+          else if (name.includes("naissance") || name.includes("birth")) acc.birth_certificate = detail.file;
+          return acc;
+        }, {});
+
+        return {
+          cin: res.cin,
+          status: res.is_correct ? "verified" : "mismatch",
+          documentsUploaded: res.file_details.length,
+          mismatch_details: res.mismatch_details,
+          document_paths: fileData
+        };
+      });
 
       if (statusUpdates.length > 0) {
         await apiService.bulkUpdateStatus(statusUpdates);

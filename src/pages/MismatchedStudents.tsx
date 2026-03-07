@@ -14,6 +14,8 @@ const docLabel = (doc: string) => {
     case "birth_certificate": return "Birth Certificate";
     case "baccalaureate": return "Baccalaureate";
     case "cin": return "CIN";
+    case "ocr_process": return "OCR Search";
+    case "verification": return "Validation";
     default: return doc;
   }
 };
@@ -39,8 +41,12 @@ const MismatchedStudents = () => {
 
   const grouped = groupByFiliereClasse(students);
 
-  const getMismatches = (studentId: string): StudentMismatch | undefined =>
-    undefined; // Temporarily disabled persistence for mismatch details
+  const getMismatches = (student: Student): any => {
+    return student.mismatch_details ? {
+      studentId: student.id,
+      mismatches: student.mismatch_details
+    } : undefined;
+  };
 
   return (
     <div className="space-y-6">
@@ -100,7 +106,7 @@ const MismatchedStudents = () => {
                     </TableHeader>
                     <TableBody>
                       {students.map(student => {
-                        const mm = getMismatches(student.id);
+                        const mm = getMismatches(student);
                         const isExpanded = expandedStudent === student.id;
                         return (
                           <>

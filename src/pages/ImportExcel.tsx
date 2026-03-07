@@ -20,7 +20,7 @@ const ImportExcel = () => {
       const wb = XLSX.read(bstr, { type: "binary" });
       const wsname = wb.SheetNames[0];
       const ws = wb.Sheets[wsname];
-      const data = XLSX.utils.sheet_to_json(ws);
+      const data = XLSX.utils.sheet_to_json(ws, { raw: false, dateNF: "yyyy-mm-dd" });
       setPreviewData(data);
     };
     reader.readAsBinaryString(f);
@@ -47,27 +47,68 @@ const ImportExcel = () => {
     setImporting(true);
     try {
       // Map Excel data to student structure
-      const students = previewData.map(row => ({
-        id: row.id || row.student_id || row.CIN || Math.random().toString(36).substr(2, 9),
-        fullName: row.fullName || row.Name || row["Nom Complet"],
-        dateOfBirth: row.dateOfBirth || row.DOB || row["Date de naissance"],
-        birthplace: row.birthplace || row.Birthplace || row["Lieu de naissance"],
-        cin: row.cin || row.CIN || row.ID,
-        filiere: row.filiere || row.Filière,
-        classe: row.classe || row.Classe,
-        group: row.group || row.Group || row.Groupe,
-        parentName: row.parentName || row["Nom du parent"],
-        bacYear: row.bacYear || row["Année du bac"],
-        bacScore: row.bacScore || row["Moyenne du bac"],
-        bacMention: row.bacMention || row["Mention du bac"],
-      }));
+      const students = previewData.map(row => {
+        // Find values by checking keys case-insensitively and ignoring accents if possible
+        const getValue = (possibleKeys: string[]) => {
+          const keys = Object.keys(row);
+          // Try exact matches first
+          const exactMatch = keys.find(k =>
+            possibleKeys.some(pk => k.toLowerCase().trim() === pk.toLowerCase().trim())
+          );
+          if (exactMatch) return row[exactMatch];
+
+          // Try partial matches (e.g. "Prenom (Fr)" matching "prenom")
+          const partialMatch = keys.find(k =>
+            possibleKeys.some(pk => k.toLowerCase().includes(pk.toLowerCase()) && pk.length > 3)
+          );
+          return partialMatch ? row[partialMatch] : null;
+        };
+
+        const cin = (getValue(["cin", "id", "cin_number"]) || "").toString().trim().toUpperCase();
+        const studentId = (getValue(["id", "student_id", "cne", "massar"]) || cin || Math.random().toString(36).substr(2, 9)).toString().trim();
+
+        // Robust name handling
+        let prenom = (getValue(["prenom", "prénom", "prã©nom", "prã©nom", "first name", "firstname"]) || "").toString().trim();
+        let nom = (getValue(["nom", "last name", "lastname", "surname"]) || "").toString().trim();
+        const fullNameFromRow = (getValue(["fullName", "full name", "name", "nom complet"]) || "").toString().trim();
+
+        // Only split if BOTH are missing but we have a fullName
+        if (!nom && !prenom && fullNameFromRow && fullNameFromRow.includes(" ")) {
+          const parts = fullNameFromRow.split(" ");
+          nom = parts[0];
+          prenom = parts.slice(1).join(" ");
+        }
+
+        // Prioritize Nom + Prénom concatenation as requested
+        const fullName = (nom && prenom)
+          ? `${nom} ${prenom}`.trim()
+          : (fullNameFromRow || nom || prenom || "Unknown Student");
+
+        return {
+          id: studentId,
+          firstName: prenom,
+          lastName: nom,
+          fullName: fullName,
+          dateOfBirth: getValue(["dateOfBirth", "dob", "date de naissance"]),
+          birthplace: getValue(["birthplace", "lieu de naissance"]),
+          cin: cin,
+          filiere: getValue(["filiere", "filière", "branch"]),
+          classe: getValue(["classe", "class"]),
+          group: getValue(["group", "groupe"]),
+          parentName: getValue(["parentName", "parent name", "nom du parent"]),
+          bacYear: getValue(["bacYear", "bac year", "année du bac"]),
+          bacScore: getValue(["bacScore", "bac score", "moyenne du bac"]),
+          bacMention: getValue(["bacMention", "bac mention", "mention du bac"]),
+        };
+      });
 
       await apiService.bulkStoreStudents(students);
       setImported(true);
       toast.success(`${students.length} students imported successfully`);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Import error:", error);
-      toast.error("Failed to import students to the database");
+      const message = error.message || "Failed to import students to the database";
+      toast.error(message);
     } finally {
       setImporting(false);
     }

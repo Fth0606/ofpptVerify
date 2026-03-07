@@ -76,39 +76,48 @@ const CorrectStudents = () => {
                     Classe: {classe}
                   </h3>
                   <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Full Name</TableHead>
-                        <TableHead>CIN</TableHead>
-                        <TableHead>Date of Birth</TableHead>
-                        <TableHead>Birthplace</TableHead>
-                        <TableHead>Group</TableHead>
-                        <TableHead>Parent Name</TableHead>
-                        <TableHead>Bac Year</TableHead>
-                        <TableHead>Bac Score</TableHead>
-                        <TableHead>Mention</TableHead>
-                        <TableHead>Status</TableHead>
+                    <TableHeader className="bg-slate-800 hover:bg-slate-800">
+                      <TableRow className="hover:bg-transparent border-b-0">
+                        <TableHead className="text-white font-bold uppercase py-4">CIN</TableHead>
+                        <TableHead className="text-white font-bold uppercase py-4">Nom</TableHead>
+                        <TableHead className="text-white font-bold uppercase py-4">Prénom</TableHead>
+                        <TableHead className="text-white font-bold uppercase py-4 text-center">Age</TableHead>
+                        <TableHead className="text-white font-bold uppercase py-4 text-center">Status</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {students.map(student => (
-                        <TableRow key={student.id}>
-                          <TableCell className="font-medium">{student.fullName}</TableCell>
-                          <TableCell>{student.cin}</TableCell>
-                          <TableCell>{student.dateOfBirth}</TableCell>
-                          <TableCell>{student.birthplace}</TableCell>
-                          <TableCell>{student.group}</TableCell>
-                          <TableCell>{student.parentName}</TableCell>
-                          <TableCell>{student.bacYear}</TableCell>
-                          <TableCell>{student.bacScore}</TableCell>
-                          <TableCell>{student.bacMention}</TableCell>
-                          <TableCell>
-                            <Badge className="bg-success/15 text-success border-0">
-                              <CheckCircle2 className="h-3 w-3 mr-1" />Verified
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {students.map(student => {
+                        const calculateAge = (dob: string) => {
+                          if (!dob) return "-";
+                          try {
+                            const birthDate = new Date(dob);
+                            if (isNaN(birthDate.getTime())) return "-";
+                            const today = new Date();
+                            let age = today.getFullYear() - birthDate.getFullYear();
+                            const m = today.getMonth() - birthDate.getMonth();
+                            if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+                              age--;
+                            }
+                            return age;
+                          } catch {
+                            return "-";
+                          }
+                        };
+
+                        return (
+                          <TableRow key={student.id} className="border-b">
+                            <TableCell className="font-mono text-xs">{student.cin}</TableCell>
+                            <TableCell className="font-medium uppercase">{student.lastName || "-"}</TableCell>
+                            <TableCell className="font-medium capitalize">{student.firstName || "-"}</TableCell>
+                            <TableCell className="text-center">{calculateAge(student.dateOfBirth)}</TableCell>
+                            <TableCell className="text-center">
+                              <Badge className="bg-success/15 text-success border-0">
+                                <CheckCircle2 className="h-3 w-3 mr-1" />Verified
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>

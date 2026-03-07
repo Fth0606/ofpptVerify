@@ -5,10 +5,27 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Filter, ArrowUpDown, MoreHorizontal, User } from "lucide-react";
+import { Search, Filter, ArrowUpDown, MoreHorizontal, User, Trash2, Eye } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { apiService, Student } from "@/lib/api-service";
 import { toast } from "sonner";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const Students = () => {
   const navigate = useNavigate();
@@ -16,25 +33,45 @@ const Students = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [loading, setLoading] = useState(true);
+  const [studentToDelete, setStudentToDelete] = useState<Student | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+
+  const fetchStudents = async () => {
+    setLoading(true);
+    try {
+      const data = await apiService.fetchStudents();
+      setStudents(data);
+    } catch (error) {
+      toast.error("Failed to load students from database");
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const getStudents = async () => {
-      try {
-        const data = await apiService.fetchStudents();
-        setStudents(data);
-      } catch (error) {
-        toast.error("Failed to load students from database");
-        console.error(error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    getStudents();
+    fetchStudents();
   }, []);
 
+  const handleDelete = async () => {
+    if (!studentToDelete) return;
+
+    try {
+      await apiService.deleteStudent(studentToDelete.id);
+      toast.success(`Student ${studentToDelete.fullName} deleted successfully`);
+      setStudents(students.filter(s => s.id !== studentToDelete.id));
+    } catch (error) {
+      toast.error("Failed to delete student");
+      console.error(error);
+    } finally {
+      setStudentToDelete(null);
+      setIsDeleteDialogOpen(false);
+    }
+  };
+
   const filteredStudents = students.filter(s => {
-    const matchesSearch = s.fullName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          s.cin.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = s.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.cin.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === "all" || s.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -91,63 +128,73 @@ const Students = () => {
         <CardContent>
           <div className="rounded-md border overflow-hidden">
             <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[250px]">
-                    <div className="flex items-center gap-2">Student <ArrowUpDown className="h-3 w-3" /></div>
-                  </TableHead>
-                  <TableHead>CIN</TableHead>
-                  <TableHead>Filière / Classe</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Docs</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
+              <TableHeader className="bg-slate-800 hover:bg-slate-800">
+                <TableRow className="hover:bg-transparent border-b-0">
+                  <TableHead className="text-white font-bold uppercase py-4">CIN <ArrowUpDown className="inline h-3 w-3" /></TableHead>
+                  <TableHead className="text-white font-bold uppercase py-4">Nom <ArrowUpDown className="inline h-3 w-3" /></TableHead>
+                  <TableHead className="text-white font-bold uppercase py-4">Prénom <ArrowUpDown className="inline h-3 w-3" /></TableHead>
+                  <TableHead className="text-white font-bold uppercase py-4">Filière <ArrowUpDown className="inline h-3 w-3" /></TableHead>
+                  <TableHead className="text-white font-bold uppercase py-4">Classe <ArrowUpDown className="inline h-3 w-3" /></TableHead>
+                  <TableHead className="text-white font-bold uppercase py-4">Age <ArrowUpDown className="inline h-3 w-3" /></TableHead>
+                  <TableHead className="text-white font-bold uppercase py-4 text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8">Loading students...</TableCell>
+                    <TableCell colSpan={7} className="text-center py-8">Loading students...</TableCell>
                   </TableRow>
                 ) : filteredStudents.length > 0 ? (
-                  filteredStudents.map((student) => (
-                    <TableRow key={student.id} className="cursor-pointer" onClick={() => navigate(`/students/${student.id}`)}>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
-                            <User className="h-4 w-4" />
-                          </div>
-                          <span className="font-medium">{student.fullName}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">{student.cin}</TableCell>
-                      <TableCell>
-                        <div className="text-xs">
-                          <p className="font-semibold">{student.filiere}</p>
-                          <p className="text-muted-foreground">{student.classe}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>{getStatusBadge(student.status)}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div className="h-1.5 w-12 rounded-full bg-muted">
-                            <div 
-                              className="h-full rounded-full bg-primary" 
-                              style={{ width: `${(student.documentsUploaded / 3) * 100}%` }}
-                            />
-                          </div>
-                          <span className="text-xs">{student.documentsUploaded}/3</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  filteredStudents.map((student) => {
+                    const calculateAge = (dob: string) => {
+                      if (!dob) return "-";
+                      try {
+                        const birthDate = new Date(dob);
+                        if (isNaN(birthDate.getTime())) return "-";
+                        const today = new Date();
+                        let age = today.getFullYear() - birthDate.getFullYear();
+                        const m = today.getMonth() - birthDate.getMonth();
+                        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+                          age--;
+                        }
+                        return age;
+                      } catch {
+                        return "-";
+                      }
+                    };
+
+                    return (
+                      <TableRow
+                        key={student.id}
+                        className="cursor-pointer hover:bg-muted/50 border-b transition-colors"
+                        onClick={() => navigate(`/students/${student.id}`)}
+                      >
+                        <TableCell className="font-mono text-sm py-4">{student.cin}</TableCell>
+                        <TableCell className="font-medium py-4 uppercase">{student.lastName || "-"}</TableCell>
+                        <TableCell className="font-medium py-4 capitalize">{student.firstName || "-"}</TableCell>
+                        <TableCell className="py-4">{student.filiere || "-"}</TableCell>
+                        <TableCell className="py-4 font-mono text-sm">{student.classe || "-"}</TableCell>
+                        <TableCell className="py-4">{calculateAge(student.dateOfBirth)}</TableCell>
+                        <TableCell className="text-center py-4" onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            className="h-8 px-4 bg-red-600 hover:bg-red-700"
+                            onClick={() => {
+                              setStudentToDelete(student);
+                              setIsDeleteDialogOpen(true);
+                            }}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                       No students found matching your criteria
                     </TableCell>
                   </TableRow>
@@ -157,6 +204,23 @@ const Students = () => {
           </div>
         </CardContent>
       </Card>
+
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete <strong>{studentToDelete?.fullName}</strong> from the database.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

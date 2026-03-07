@@ -22,8 +22,28 @@ def normalize_value(value):
     if not value:
         return ""
     # Remove common separators and clean whitespace
-    value = re.sub(r'[:;=_-]', '', value)
+    value = re.sub(r'[:;=_\-><\[\]]', '', value)
     return value.strip()
+
+
+def names_match(name1, name2):
+    """Check if two names match regardless of word order."""
+    if not name1 or not name2:
+        return False
+    
+    # Normalize and split into words
+    words1 = set(re.findall(r'\w+', name1.lower()))
+    words2 = set(re.findall(r'\w+', name2.lower()))
+    
+    # Filter out short noise words
+    words1 = {w for w in words1 if len(w) > 1}
+    words2 = {w for w in words2 if len(w) > 1}
+    
+    if not words1 or not words2:
+        return False
+        
+    # Check if sets are equal
+    return words1 == words2
 
 
 def reformat_name(name_info):
@@ -39,8 +59,8 @@ def reformat_name(name_info):
         return f"{normalize_value(prenom)} {normalize_value(nom)}"
     
     # Priority 2: Full name from candidate line
-    elif "Le candidat(e)" in name_info:
-        full_name = normalize_value(name_info["Le candidat(e)"])
+    elif "Le candidat(e)" in name_info or "Candidature" in name_info:
+        full_name = normalize_value(name_info.get("Le candidat(e)") or name_info.get("Candidature"))
         parts = full_name.split()
         if len(parts) == 2:
             return f"{parts[1]} {parts[0]}"
@@ -66,7 +86,7 @@ def extract_names(text, keywords):
     patterns = {
         "Nom": r'(?i)Nom|Last\s*Name|Surname',
         "Prénom": r'(?i)Pr[ée]no[mn]|First\s*Name',
-        "Le candidat(e)": r'(?i)Le\s*candidat\(e\)'
+        "Le candidat(e)": r'(?i)Le\s*candidat\(e\)|Candidature'
     }
 
     for line in lines:
@@ -234,9 +254,12 @@ def validate_folder():
             errors = []
 
             if extracted_names:
-                first_name = extracted_names[0]
-                is_correct = all(name == first_name for name in extracted_names)
-                verified_name = first_name if is_correct else None
+                # Use the first extracted name as baseline
+                baseline_name = extracted_names[0]
+                
+                # Check if all extracted names match the baseline (order-insensitive)
+                is_correct = all(names_match(name, baseline_name) for name in extracted_names)
+                verified_name = baseline_name if is_correct else None
 
                 # Generate errors for mismatches
                 for detail in file_details:
@@ -245,7 +268,7 @@ def validate_folder():
                             "file": detail["file"],
                             "error": "No name could be extracted"
                         })
-                    elif not is_correct and detail["extracted_name"] != first_name:
+                    elif not is_correct and not names_match(detail["extracted_name"], baseline_name):
                         errors.append({
                             "file": detail["file"],
                             "error": f"Name mismatch: found '{detail['extracted_name']}'"

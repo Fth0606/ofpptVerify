@@ -6,6 +6,8 @@ import { VerificationStatus } from "./mock-data";
 
 export interface Student {
   id: string;
+  firstName: string;
+  lastName: string;
   fullName: string;
   dateOfBirth: string;
   birthplace: string;
@@ -19,6 +21,8 @@ export interface Student {
   bacYear: string;
   bacScore: string;
   bacMention: string;
+  mismatch_details?: any[];
+  document_paths?: Record<string, string>;
 }
 
 const getHeaders = (isJson = true) => {
@@ -26,7 +30,7 @@ const getHeaders = (isJson = true) => {
     "X-API-TOKEN": API_TOKEN,
   };
   if (isJson) {
-    headers["Content-Type"] = "application/json";
+    headers["Content-Type"] = "application/json; charset=UTF-8";
   }
   return headers;
 };
@@ -44,17 +48,28 @@ export const apiService = {
     return response.json();
   },
 
+  async fetchStudentById(id: string): Promise<Student> {
+    const response = await fetch(`${API_URL}/students/${id}`, {
+      headers: getHeaders(),
+    });
+    if (!response.ok) throw new Error("Failed to fetch student details");
+    return response.json();
+  },
+
   async bulkStoreStudents(students: any[]): Promise<Student[]> {
     const response = await fetch(`${API_URL}/students/bulk`, {
       method: "POST",
       headers: getHeaders(),
       body: JSON.stringify({ students }),
     });
-    if (!response.ok) throw new Error("Failed to store students");
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || "Failed to store students");
+    }
     return response.json();
   },
 
-  async bulkUpdateStatus(updates: { cin: string; status: string; documentsUploaded?: number }[]): Promise<Student[]> {
+  async bulkUpdateStatus(updates: { cin: string; status: string; documentsUploaded?: number; mismatch_details?: any[] }[]): Promise<Student[]> {
     const response = await fetch(`${API_URL}/students/bulk-status`, {
       method: "POST",
       headers: getHeaders(),
@@ -71,6 +86,28 @@ export const apiService = {
       body: JSON.stringify(data),
     });
     if (!response.ok) throw new Error("Failed to update student status");
+    return response.json();
+  },
+
+  async deleteStudent(id: string): Promise<void> {
+    const response = await fetch(`${API_URL}/students/${id}`, {
+      method: "DELETE",
+      headers: getHeaders(),
+    });
+    if (!response.ok) throw new Error("Failed to delete student");
+  },
+
+  async uploadDocument(studentId: string, type: string, file: File): Promise<any> {
+    const formData = new FormData();
+    formData.append("document", file);
+    formData.append("type", type);
+
+    const response = await fetch(`${API_URL}/students/${studentId}/documents`, {
+      method: "POST",
+      headers: getHeaders(false), // FormData handles Content-Type
+      body: formData,
+    });
+    if (!response.ok) throw new Error("Failed to upload document");
     return response.json();
   }
 };
