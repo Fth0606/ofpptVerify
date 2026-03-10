@@ -91,48 +91,58 @@ const UploadDocuments = () => {
       // Get all students from database to verify names
       const allStudents = await apiService.fetchStudents();
 
+      const namesMatchStrict = (name1: string, name2: string): boolean => {
+        if (!name1 || !name2) return false;
+        const words1 = name1.toLowerCase().split(/\s+/).filter(w => w.length > 1).sort();
+        const words2 = name2.toLowerCase().split(/\s+/).filter(w => w.length > 1).sort();
+        if (words1.length === 0 || words2.length === 0) return false;
+        if (words1.length !== words2.length) return false;
+        return words1.every((w, i) => w === words2[i]);
+      };
+
       const enhancedResults = ocrResults.map(res => {
         const student = allStudents.find(s => s.cin.toLowerCase() === res.cin.toLowerCase());
-        let finalCorrect = res.is_correct;
+        let finalCorrect = true; // Assume true, check all docs
         let dbMismatch = false;
+        const mismatches: any[] = [];
 
-
-        if (student && res.verified_name) {
-          // Clean up names for comparison
-          const dbFull = student.fullName.toLowerCase();
-          const ocrFull = res.verified_name.toLowerCase();
-
-          // Set-based comparison for order independence
-          const dbWords = dbFull.split(/\s+/).filter(w => w.length > 1);
-          const ocrWords = ocrFull.split(/\s+/).filter(w => w.length > 1);
-
-          const missingWords = dbWords.filter(dbW => !ocrWords.some(ocrW => ocrW === dbW));
-          const extraWords = ocrWords.filter(ocrW => !dbWords.some(dbW => dbW === ocrW));
-
-          // It's a match if all DB words are there, and not too many extra words are added
-          if (missingWords.length > 0 || (ocrWords.length < 2 && dbWords.length >= 2)) {
-            finalCorrect = false;
-            dbMismatch = true;
-          }
-        } else if (!student) {
+        if (student) {
+          res.file_details.forEach(detail => {
+            if (detail.extracted_name) {
+              const isMatch = namesMatchStrict(detail.extracted_name, student.fullName);
+              if (!isMatch) {
+                finalCorrect = false;
+                dbMismatch = true;
+                mismatches.push({
+                  document: detail.file,
+                  field: "Name",
+                  excelValue: student.fullName,
+                  ocrValue: detail.extracted_name
+                });
+              }
+            } else {
+              finalCorrect = false;
+              mismatches.push({
+                document: detail.file,
+                field: "OCR",
+                excelValue: student.fullName,
+                ocrValue: "Extraction failed"
+              });
+            }
+          });
+        } else {
           finalCorrect = false;
         }
 
-        const mismatches = (res.errors || []).map(e => ({
-          document: "ocr_process",
-          field: "Name/OCR",
-          excelValue: student?.fullName || "Not found",
-          ocrValue: e.error
-        }));
-
-        if (dbMismatch && student && res.verified_name) {
+        // Add backend errors if any (like intra-folder mismatches)
+        res.errors.forEach(e => {
           mismatches.push({
-            document: "verification",
-            field: "Full Name",
-            excelValue: student.fullName,
-            ocrValue: res.verified_name
+            document: "backend",
+            field: "Error",
+            excelValue: student?.fullName || "N/A",
+            ocrValue: e.error
           });
-        }
+        });
 
         return {
           ...res,

@@ -21,30 +21,48 @@ def normalize_value(value):
     """Clean and normalize extracted values."""
     if not value:
         return ""
+    # Strip common OCR artifacts at the beginning like "ie)", "(e)", "e)", "i)"
+    # but only if followed by a closing character or clearly an artifact.
+    # We avoid matching real 2-letter names like "AL" by requiring a punctuation marker.
+    value = re.sub(r'^\s*[\(\[\]]*[a-zA-Z]{1,2}[\)\}\]>]\s*', '', value)
     # Remove common separators and clean whitespace
-    value = re.sub(r'[:;=_\-><\[\]]', '', value)
-    # Remove trailing/leading OCR artifacts like lone characters or fragments from labels
-    value = re.sub(r'^[ie]\)\s*', '', value)
-    return value.strip()
+    value = re.sub(r'[:;=_\-><\[\]\(\)]', ' ', value)
+    return " ".join(value.split())
+
+
+def levenshtein_distance(s1, s2):
+    if len(s1) < len(s2):
+        return levenshtein_distance(s2, s1)
+    if len(s2) == 0:
+        return len(s1)
+    previous_row = range(len(s2) + 1)
+    for i, c1 in enumerate(s1):
+        current_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            insertions = previous_row[j + 1] + 1
+            deletions = current_row[j] + 1
+            substitutions = previous_row[j] + (c1 != c2)
+            current_row.append(min(insertions, deletions, substitutions))
+        previous_row = current_row
+    return previous_row[-1]
 
 
 def names_match(name1, name2):
-    """Check if two names match regardless of word order."""
+    """Check if two names match regardless of word order. Strict on characters but flexible on order."""
     if not name1 or not name2:
         return False
     
     # Normalize and split into words
-    words1 = set(re.findall(r'\w+', name1.lower()))
-    words2 = set(re.findall(r'\w+', name2.lower()))
+    words1 = sorted(re.findall(r'\w+', name1.lower()))
+    words2 = sorted(re.findall(r'\w+', name2.lower()))
     
     # Filter out short noise words
-    words1 = {w for w in words1 if len(w) > 1}
-    words2 = {w for w in words2 if len(w) > 1}
+    words1 = [w for w in words1 if len(w) > 1]
+    words2 = [w for w in words2 if len(w) > 1]
     
     if not words1 or not words2:
         return False
         
-    # Check if sets are equal
     return words1 == words2
 
 
@@ -177,10 +195,10 @@ def process_image(image_path):
             
         # 4. Fallback: Extract capitalized words (last resort)
         capital_words = extract_capital_words(result)
-        if len(capital_words) >= 7:
+        if len(capital_words) >= 2:
             return {
-                "Prénom": capital_words[5],
-                "Nom": capital_words[6]
+                "Prénom": capital_words[0],
+                "Nom": " ".join(capital_words[1:])
             }
 
     except Exception as e:
