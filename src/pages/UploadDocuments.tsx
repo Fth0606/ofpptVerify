@@ -106,8 +106,8 @@ const UploadDocuments = () => {
           const dbWords = dbFull.split(/\s+/).filter(w => w.length > 1);
           const ocrWords = ocrFull.split(/\s+/).filter(w => w.length > 1);
 
-          const missingWords = dbWords.filter(dbW => !ocrWords.some(ocrW => ocrW.includes(dbW) || dbW.includes(ocrW)));
-          const extraWords = ocrWords.filter(ocrW => !dbWords.some(dbW => dbW.includes(ocrW) || ocrW.includes(dbW)));
+          const missingWords = dbWords.filter(dbW => !ocrWords.some(ocrW => ocrW === dbW));
+          const extraWords = ocrWords.filter(ocrW => !dbWords.some(dbW => dbW === ocrW));
 
           // It's a match if all DB words are there, and not too many extra words are added
           if (missingWords.length > 0 || (ocrWords.length < 2 && dbWords.length >= 2)) {
