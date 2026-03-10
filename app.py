@@ -125,15 +125,23 @@ def extract_names(text, keywords):
 
 
 def extract_capital_words(result):
-    """Extract capitalized words from OCR result."""
+    """Extract capitalized words from OCR result, filtering out common document headers."""
     capital_words = []
+    headers = {
+        "ROYAUME", "MAROC", "CARTE", "NATIONALE", "IDENTITE", "D'IDENTITE",
+        "CANDIDAT", "CANDIDATE", "PRENOM", "NOM", "REPUBLIQUE", "FRANCAISE",
+        "MINISTERE", "EDUCATION", "NATIONALE", "IDENTIFICATION", "UNIQUE"
+    }
+
     for page in result.pages:
         for block in page.blocks:
             for line in block.lines:
                 for word in line.words:
-                    word_text = word.value
-                    if word_text.isupper() and len(word_text) > 2:
-                        capital_words.append(word_text)
+                    word_text = re.sub(r'[^A-Z]', '', word.value.upper())
+                    if word_text.isupper() and len(word_text) > 2 and word_text not in headers:
+                        # Extra check: avoid words that are likely addresses or locations
+                        # Often these are in later sections of the document
+                        capital_words.append(word.value)
     return capital_words
 
 
@@ -162,8 +170,33 @@ def process_image(image_path):
         result = model(doc)
         extracted_text = result.render()
 
+        # Check if it's a CIN (Moroccan National ID)
+        is_cin = any(ind in extracted_text.upper() for ind in ["ROYAUME DU MAROC", "CARTE NATIONALE", "IDENTITE"])
+
         # 1. Attempt: Extract names using keywords
         name_info = extract_names(extracted_text, keywords)
+
+        if is_cin and not name_info:
+            # Specific CIN logic: Names are usually the first few capitalized lines
+            # after the headers and before "Né le"
+            lines = extracted_text.split('\n')
+            cin_name_parts = []
+            found_header = False
+            for line in lines:
+                l_upper = line.upper()
+                if any(h in l_upper for h in ["CARTE NATIONALE", "IDENTITE"]):
+                    found_header = True
+                    continue
+                if found_header:
+                    if any(f in l_upper for f in ["NÉ LE", "NE LE", "VALABLE", "MAJMAA", "TOLBA", "KHEMISSET"]):
+                        break
+                    # Clean the line and see if it's a name part (all caps)
+                    clean_line = re.sub(r'[^A-Z\s]', '', line.strip())
+                    if len(clean_line) > 2 and clean_line.isupper():
+                        cin_name_parts.append(clean_line)
+
+            if cin_name_parts:
+                return {"Le candidat(e)": " ".join(cin_name_parts)}
 
         if not name_info:
             # 2. Attempt: Regex patterns
@@ -194,8 +227,9 @@ def process_image(image_path):
             return name_info
             
         # 4. Fallback: Extract capitalized words (last resort)
+        # We only use this if we've filtered enough headers
         capital_words = extract_capital_words(result)
-        if len(capital_words) >= 2:
+        if 2 <= len(capital_words) <= 5: # Limit words to avoid over-extraction from headers
             return {
                 "Prénom": capital_words[0],
                 "Nom": " ".join(capital_words[1:])
