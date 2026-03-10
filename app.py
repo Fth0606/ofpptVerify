@@ -23,6 +23,8 @@ def normalize_value(value):
         return ""
     # Remove common separators and clean whitespace
     value = re.sub(r'[:;=_\-><\[\]]', '', value)
+    # Remove trailing/leading OCR artifacts like lone characters or fragments from labels
+    value = re.sub(r'^[ie]\)\s*', '', value)
     return value.strip()
 
 
@@ -86,7 +88,7 @@ def extract_names(text, keywords):
     patterns = {
         "Nom": r'(?i)Nom|Last\s*Name|Surname',
         "Prénom": r'(?i)Pr[ée]no[mn]|First\s*Name',
-        "Le candidat(e)": r'(?i)Le\s*candidat\(e\)|Candidature'
+        "Le candidat(e)": r'(?i)Le\s*candidat\(?e\)?|Candidat\(e\)|Candidat'
     }
 
     for line in lines:
@@ -162,8 +164,13 @@ def process_image(image_path):
                     elif 'prénom' in key or 'prenom' in key:
                         name_info['Prénom'] = value
 
-                if 'candidat' in line.lower() and i + 1 < len(lines):
-                    name_info['Le candidat(e)'] = lines[i + 1].strip()
+                if 'candidat' in line.lower():
+                    # Check same line first
+                    match = re.search(r'(?i)candidat\(?e\)?[\s:]+([A-Z\s]{3,})', line)
+                    if match:
+                        name_info['Le candidat(e)'] = match.group(1).strip()
+                    elif i + 1 < len(lines):
+                        name_info['Le candidat(e)'] = lines[i + 1].strip()
 
         if name_info:
             return name_info
