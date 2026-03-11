@@ -237,17 +237,29 @@ def process_image(image_path):
                     elif i + 1 < len(lines):
                         name_info['Le candidat(e)'] = lines[i + 1].strip()
 
-        if name_info:
-            return name_info
-            
+        final_data = name_info if name_info else {}
+
         # 4. Fallback: Extract capitalized words (last resort)
-        # We only use this if we've filtered enough headers
-        capital_words = extract_capital_words(result)
-        if 2 <= len(capital_words) <= 5: # Limit words to avoid over-extraction from headers
-            return {
-                "Prénom": capital_words[0],
-                "Nom": " ".join(capital_words[1:])
-            }
+        if not final_data:
+            capital_words = extract_capital_words(result)
+            if 2 <= len(capital_words) <= 5:
+                final_data = {
+                    "Prénom": capital_words[0],
+                    "Nom": " ".join(capital_words[1:])
+                }
+
+        # 5. Extract Date of Birth and CIN (common for all IDs)
+        # Date pattern: DD.MM.YYYY, DD-MM-YYYY, DD/MM/YYYY, or with colon due to OCR error
+        dob_match = re.search(r'(?i)(?:n[ée]\s*le|date\s*de\s*naissance)[:\s]+(\d{1,2}[\.\-\/:]\d{1,2}[\.\-\/:]\d{4})', extracted_text)
+        if dob_match:
+            final_data['dob'] = dob_match.group(1).replace(':', '.')
+
+        # CIN pattern: 1-2 letters followed by 5-7 digits
+        cin_match = re.search(r'(?i)N[°\s]*([A-Z]{1,2}\d{5,7})', extracted_text)
+        if cin_match:
+            final_data['cin'] = cin_match.group(1)
+
+        return final_data if final_data else None
 
     except Exception as e:
         print(f"Error processing {image_path}: {e}")
@@ -309,13 +321,15 @@ def validate_folder():
 
             # Process each image in the folder
             for image_path in image_paths:
-                names = process_image(image_path)
-                formatted_name = reformat_name(names) if names else None
+                ocr_data = process_image(image_path)
+                formatted_name = reformat_name(ocr_data) if ocr_data else None
 
                 file_details.append({
                     "file": os.path.basename(image_path),
                     "extracted_name": formatted_name,
-                    "raw_data": names
+                    "extracted_dob": ocr_data.get('dob') if ocr_data else None,
+                    "extracted_cin": ocr_data.get('cin') if ocr_data else None,
+                    "raw_data": ocr_data
                 })
 
                 if formatted_name:
