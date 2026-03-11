@@ -22,9 +22,16 @@ def normalize_value(value):
     if not value:
         return ""
     # Strip common OCR artifacts at the beginning like "ie)", "(e)", "e)", "i)"
-    # but only if followed by a closing character or clearly an artifact.
-    # We avoid matching real 2-letter names like "AL" by requiring a punctuation marker.
     value = re.sub(r'^\s*[\(\[\]]*[a-zA-Z]{1,2}[\)\}\]>]\s*', '', value)
+
+    # Strip leading single/two-letter noise words that are likely OCR fragments
+    # from document headers (e.g., "A", "EU", "RO")
+    while True:
+        new_value = re.sub(r'^\s*(?:A|EU|LE|DE|LA|DU|RO|MA|ET)\b\s*', '', value, flags=re.IGNORECASE)
+        if new_value == value:
+            break
+        value = new_value
+
     # Remove common separators and clean whitespace
     value = re.sub(r'[:;=_\-><\[\]\(\)]', ' ', value)
     return " ".join(value.split())
@@ -182,6 +189,9 @@ def process_image(image_path):
             lines = extracted_text.split('\n')
             cin_name_parts = []
             found_header = False
+            # Common headers to ignore within the name area
+            cin_blacklist = ["ROYAUME", "MAROC", "CARTE", "NATIONALE", "IDENTITE", "D'IDENTITE"]
+
             for line in lines:
                 l_upper = line.upper()
                 if any(h in l_upper for h in ["CARTE NATIONALE", "IDENTITE"]):
@@ -193,7 +203,11 @@ def process_image(image_path):
                     # Clean the line and see if it's a name part (all caps)
                     clean_line = re.sub(r'[^A-Z\s]', '', line.strip())
                     if len(clean_line) > 2 and clean_line.isupper():
-                        cin_name_parts.append(clean_line)
+                        # Further filter out any lingering headers
+                        words = clean_line.split()
+                        filtered_words = [w for w in words if w not in cin_blacklist]
+                        if filtered_words:
+                            cin_name_parts.append(" ".join(filtered_words))
 
             if cin_name_parts:
                 return {"Le candidat(e)": " ".join(cin_name_parts)}
