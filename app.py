@@ -21,28 +21,54 @@ def normalize_value(value):
     """Clean and normalize extracted values."""
     if not value:
         return ""
-    # Remove common separators and clean whitespace
-    value = re.sub(r'[:;=_\-><\[\]]', '', value)
-    return value.strip()
+    #Strip common OCR artifacts at the beginning like "ie)", "(e)", "e)", "i)"
+    value = re.sub(r'^\s*[\(\[\]]*[a-zA-Z]{1,2}[\)\}\]>]\s*', '', value)
+    
+    # Strip leading single/two-letter noise words that are likely OCR fragments 
+    # from document headers (e.g., "A", "EU", "RO")
+    while True:
+        new_value = re.sub(r'^\s*(?:A|EU|LE|DE|LA|DU|RO|MA|ET)\b\s*', '', value, flags=re.IGNORECASE)
+        if new_value == value:
+            break
+        value = new_value
+        # Remove common separators and clean whitespace
+    value = re.sub(r'[:;=_\-><\[\]\(\)]', ' ', value)
+    return " ".join(value.split())
+
+
+def levenshtein_distance(s1, s2):
+    if len(s1) < len(s2):
+        return levenshtein_distance(s2, s1)
+    if len(s2) == 0:
+        return len(s1)
+    previous_row = range(len(s2) + 1)
+    for i, c1 in enumerate(s1):
+        current_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            insertions = previous_row[j + 1] + 1
+            deletions = current_row[j] + 1
+            substitutions = previous_row[j] + (c1 != c2)
+            current_row.append(min(insertions, deletions, substitutions))
+        previous_row = current_row
+    return previous_row[-1]
 
 
 def names_match(name1, name2):
-    """Check if two names match regardless of word order."""
+    """Check if two names match regardless of word order. Strict on characters but flexible on order."""
     if not name1 or not name2:
         return False
     
     # Normalize and split into words
-    words1 = set(re.findall(r'\w+', name1.lower()))
-    words2 = set(re.findall(r'\w+', name2.lower()))
+    words1 = sorted(re.findall(r'\w+', name1.lower()))
+    words2 = sorted(re.findall(r'\w+', name2.lower()))
     
     # Filter out short noise words
-    words1 = {w for w in words1 if len(w) > 1}
-    words2 = {w for w in words2 if len(w) > 1}
+    words1 = [w for w in words1 if len(w) > 1]
+    words2 = [w for w in words2 if len(w) > 1]
     
     if not words1 or not words2:
         return False
         
-    # Check if sets are equal
     return words1 == words2
 
 
@@ -86,7 +112,8 @@ def extract_names(text, keywords):
     patterns = {
         "Nom": r'(?i)Nom|Last\s*Name|Surname',
         "Prénom": r'(?i)Pr[ée]no[mn]|First\s*Name',
-        "Le candidat(e)": r'(?i)Le\s*candidat\(e\)|Candidature'
+        "Le candidat(e)": r'(?i)Le\s*candidat\(?e\)?|Candidat\(e\)|Candidat'
+        
     }
 
     for line in lines:
@@ -105,15 +132,22 @@ def extract_names(text, keywords):
 
 
 def extract_capital_words(result):
-    """Extract capitalized words from OCR result."""
+    """Extract capitalized words from OCR result, filtering out common document headers."""
     capital_words = []
+    headers = {
+    "ROYAUME", "MAROC", "CARTE", "NATIONALE", "IDENTITE", "D'IDENTITE",
+    "CANDIDAT", "CANDIDATE", "PRENOM", "NOM", "REPUBLIQUE", "FRANCAISE",
+    "MINISTERE", "EDUCATION", "NATIONALE", "IDENTIFICATION", "UNIQUE"
+    }
     for page in result.pages:
-        for block in page.blocks:
-            for line in block.lines:
-                for word in line.words:
-                    word_text = word.value
-                    if word_text.isupper() and len(word_text) > 2:
-                        capital_words.append(word_text)
+        for block in page.blocks:  # Indented correctly
+            for line in block.lines:  # Indented correctly
+                for word in line.words:  # Indented correctly
+                    word_text = re.sub(r'[^A-Z]', '', word.value.upper())
+                    if word_text.isupper() and len(word_text) > 2 and word_text not in headers:
+                        # Extra check: avoid words that are likely addresses or locations
+                        # Often these are in later sections of the document
+                        capital_words.append(word.value)
     return capital_words
 
 
@@ -141,9 +175,41 @@ def process_image(image_path):
         doc = DocumentFile.from_images(image_path)
         result = model(doc)
         extracted_text = result.render()
+         # Check if it's a CIN (Moroccan National ID)
+        is_cin = any(ind in extracted_text.upper() for ind in ["ROYAUME DU MAROC", "CARTE NATIONALE", "IDENTITE"])
 
         # 1. Attempt: Extract names using keywords
         name_info = extract_names(extracted_text, keywords)
+        
+        if is_cin and not name_info:
+            # Specific CIN logic: Names are usually the first few capitalized lines 
+            # after the headers and before "Né le"
+            lines = extracted_text.split('\n')
+            cin_name_parts = []
+            found_header = False
+            # Common headers to ignore within the name area
+            cin_blacklist = ["ROYAUME", "MAROC", "CARTE", "NATIONALE", "IDENTITE", "D'IDENTITE"]
+            
+            for line in lines:
+                l_upper = line.upper()
+                if any(h in l_upper for h in ["CARTE NATIONALE", "IDENTITE"]):
+                    found_header = True
+                    continue
+                if found_header:
+                    if any(f in l_upper for f in ["NÉ LE", "NE LE", "VALABLE", "MAJMAA", "TOLBA", "KHEMISSET"]):
+                        break
+                    # Clean the line and see if it's a name part (all caps)
+                    clean_line = re.sub(r'[^A-Z\s]', '', line.strip())
+                    if len(clean_line) > 2 and clean_line.isupper():
+                        # Further filter out any lingering headers
+                        words = clean_line.split()
+                        filtered_words = [w for w in words if w not in cin_blacklist]
+                        if filtered_words:
+                            cin_name_parts.append(" ".join(filtered_words))
+            
+            if cin_name_parts:
+                return {"Le candidat(e)": " ".join(cin_name_parts)}
+
 
         if not name_info:
             # 2. Attempt: Regex patterns
@@ -162,19 +228,36 @@ def process_image(image_path):
                     elif 'prénom' in key or 'prenom' in key:
                         name_info['Prénom'] = value
 
-                if 'candidat' in line.lower() and i + 1 < len(lines):
-                    name_info['Le candidat(e)'] = lines[i + 1].strip()
+                if 'candidat' in line.lower():
+                    # Check same line first
+                    match = re.search(r'(?i)candidat\(?e\)?[\s:]+([A-Z\s]{3,})', line)
+                    if match:
+                        name_info['Le candidat(e)'] = match.group(1).strip()
+                    elif i + 1 < len(lines):
+                        name_info['Le candidat(e)'] = lines[i + 1].strip()
 
-        if name_info:
-            return name_info
+        final_data = name_info if name_info else {}
             
         # 4. Fallback: Extract capitalized words (last resort)
-        capital_words = extract_capital_words(result)
-        if len(capital_words) >= 7:
-            return {
-                "Prénom": capital_words[5],
-                "Nom": capital_words[6]
+        if not final_data:
+            capital_words = extract_capital_words(result)
+        if 2 <= len(capital_words) <= 5:
+                final_data = {
+                    "Prénom": capital_words[0],
+                    "Nom": " ".join(capital_words[1:])
             }
+        # 5. Extract Date of Birth and CIN (common for all IDs)
+        # Date pattern: DD.MM.YYYY, DD-MM-YYYY, DD/MM/YYYY, or with colon due to OCR error
+        dob_match = re.search(r'(?i)(?:n[ée]\s*le|date\s*de\s*naissance)[:\s]+(\d{1,2}[\.\-\/:]\d{1,2}[\.\-\/:]\d{4})', extracted_text)
+        if dob_match:
+            final_data['dob'] = dob_match.group(1).replace(':', '.')
+            
+        # CIN pattern: 1-2 letters followed by 5-7 digits
+        cin_match = re.search(r'(?i)N[°\s]*([A-Z]{1,2}\d{5,7})', extracted_text)
+        if cin_match:
+            final_data['cin'] = cin_match.group(1)
+
+        return final_data if final_data else None
 
     except Exception as e:
         print(f"Error processing {image_path}: {e}")
@@ -236,13 +319,15 @@ def validate_folder():
 
             # Process each image in the folder
             for image_path in image_paths:
-                names = process_image(image_path)
-                formatted_name = reformat_name(names) if names else None
+                ocr_data = process_image(image_path)
+                formatted_name = reformat_name(ocr_data) if ocr_data else None
 
                 file_details.append({
                     "file": os.path.basename(image_path),
                     "extracted_name": formatted_name,
-                    "raw_data": names
+                    "extracted_dob": ocr_data.get('dob') if ocr_data else None,
+                    "extracted_cin": ocr_data.get('cin') if ocr_data else None,
+                    "raw_data": ocr_data
                 })
 
                 if formatted_name:

@@ -16,7 +16,19 @@ interface OCRResult {
   student_name?: string;
   db_mismatch?: boolean;
   errors: { file: string; error: string }[];
-  file_details: { file: string; extracted_name: string | null; raw_data: any }[];
+  file_details: { 
+    file: string; 
+    extracted_name: string | null; 
+    extracted_dob?: string | null;
+    extracted_cin?: string | null;
+    raw_data: any 
+  }[];
+  mismatch_details?: Array<{
+        document: string;
+        field: string;
+        excelValue: string;
+        ocrValue: string;
+    }>;
 }
 
 const UploadDocuments = () => {
@@ -91,48 +103,101 @@ const UploadDocuments = () => {
       // Get all students from database to verify names
       const allStudents = await apiService.fetchStudents();
 
+      const namesMatchStrict = (name1: string, name2: string): boolean => {
+        if (!name1 || !name2) return false;
+        const words1 = name1.toLowerCase().split(/\s+/).filter(w => w.length > 1).sort();
+        const words2 = name2.toLowerCase().split(/\s+/).filter(w => w.length > 1).sort();
+        if (words1.length === 0 || words2.length === 0) return false;
+        if (words1.length !== words2.length) return false;
+        return words1.every((w, i) => w === words2[i]);
+      };
+
       const enhancedResults = ocrResults.map(res => {
         const student = allStudents.find(s => s.cin.toLowerCase() === res.cin.toLowerCase());
-        let finalCorrect = res.is_correct;
+        let finalCorrect = res.is_correct; // Start with backend assessment
         let dbMismatch = false;
 
+        const mismatches: any[] = [];
 
-        if (student && res.verified_name) {
-          // Clean up names for comparison
-          const dbFull = student.fullName.toLowerCase();
-          const ocrFull = res.verified_name.toLowerCase();
+        if (student) {
+          res.file_details.forEach(detail => {
+            // 1. Verify Name
+            if (detail.extracted_name) {
+              const isMatch = namesMatchStrict(detail.extracted_name, student.fullName);
+              if (!isMatch) {
+                finalCorrect = false;
+                dbMismatch = true;
+                mismatches.push({
+                  document: detail.file,
+                  field: "Name",
+                  excelValue: student.fullName,
+                  ocrValue: detail.extracted_name
+                });
+              }
+            } else {
+              finalCorrect = false;
+              mismatches.push({
+                document: detail.file,
+                field: "OCR",
+                excelValue: student.fullName,
+                ocrValue: "Name extraction failed"
+              });
+            }
+        // 2. Verify Date of Birth (if extracted, usually from CIN/Birth Certificate)
+            if (detail.extracted_dob && student.dateOfBirth) {
+              const normalizeDate = (dateStr: string) => {
+                const parts = dateStr.split(/[\.\-\/:]/);
+                if (parts.length !== 3) return dateStr.replace(/[^0-9]/g, '');
+                
+                // If the first part is 4 digits, it's likely YYYY-MM-DD
+                if (parts[0].length === 4) {
+                  return parts[0] + parts[1].padStart(2, '0') + parts[2].padStart(2, '0');
+                }
+                // Otherwise assume DD-MM-YYYY or similar
+                return parts[2] + parts[1].padStart(2, '0') + parts[0].padStart(2, '0');
+              };
 
-          // Set-based comparison for order independence
-          const dbWords = dbFull.split(/\s+/).filter(w => w.length > 1);
-          const ocrWords = ocrFull.split(/\s+/).filter(w => w.length > 1);
-
-          const missingWords = dbWords.filter(dbW => !ocrWords.some(ocrW => ocrW.includes(dbW) || dbW.includes(ocrW)));
-          const extraWords = ocrWords.filter(ocrW => !dbWords.some(dbW => dbW.includes(ocrW) || ocrW.includes(dbW)));
-
-          // It's a match if all DB words are there, and not too many extra words are added
-          if (missingWords.length > 0 || (ocrWords.length < 2 && dbWords.length >= 2)) {
-            finalCorrect = false;
-            dbMismatch = true;
-          }
-        } else if (!student) {
+              const normOCR = normalizeDate(detail.extracted_dob);
+              const normDB = normalizeDate(student.dateOfBirth);
+              
+              if (normOCR !== normDB) {
+                finalCorrect = false;
+                dbMismatch = true;
+                mismatches.push({
+                  document: detail.file,
+                  field: "Date of Birth",
+                  excelValue: student.dateOfBirth,
+                  ocrValue: detail.extracted_dob
+                });
+              }
+            }
+        // 3. Verify CIN (if extracted from the document itself)
+            if (detail.extracted_cin && student.cin) {
+              if (detail.extracted_cin.toLowerCase() !== student.cin.toLowerCase()) {
+                finalCorrect = false;
+                dbMismatch = true;
+                mismatches.push({
+                  document: detail.file,
+                  field: "CIN",
+                  excelValue: student.cin,
+                  ocrValue: detail.extracted_cin
+                });
+              }
+            }
+          });
+        } else {
           finalCorrect = false;
         }
 
-        const mismatches = (res.errors || []).map(e => ({
-          document: "ocr_process",
-          field: "Name/OCR",
-          excelValue: student?.fullName || "Not found",
-          ocrValue: e.error
-        }));
-
-        if (dbMismatch && student && res.verified_name) {
+        // Add backend errors if any (like intra-folder mismatches)
+        res.errors.forEach(e => {
           mismatches.push({
-            document: "verification",
-            field: "Full Name",
-            excelValue: student.fullName,
-            ocrValue: res.verified_name
+            document: "backend",
+            field: "Error",
+            excelValue: student?.fullName || "N/A",
+            ocrValue: e.error
           });
-        }
+        });
 
         return {
           ...res,
@@ -306,6 +371,17 @@ const UploadDocuments = () => {
                   <p className="text-xs text-amber-600 font-bold mb-2 flex items-center gap-1">
                     <AlertCircle className="h-3 w-3" /> Warning: No student found in database with CIN {res.cin}
                   </p>
+                )}
+
+                {res.mismatch_details && (res.mismatch_details as any[]).length > 0 && (
+                  <div className="mt-2 p-2 rounded bg-red-100/50 border border-red-200">
+                    <p className="text-xs font-bold text-red-800 mb-1">Mismatch Details:</p>
+                    {(res.mismatch_details as any[]).map((m: any, i: number) => (
+                      <p key={i} className="text-[10px] text-red-700">
+                        • <strong>{m.document}</strong>: {m.field} mismatch (Expected: "{m.excelValue}", Got: "{m.ocrValue}")
+                      </p>
+                    ))}
+                  </div>
                 )}
 
                 {res.errors.length > 0 && (
