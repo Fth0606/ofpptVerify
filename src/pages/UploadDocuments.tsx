@@ -119,7 +119,7 @@ const UploadDocuments = () => {
         }
 
         const mismatches = (res.errors || []).map(e => ({
-          document: "ocr_process",
+          document: e.file,
           field: "Name/OCR",
           excelValue: student?.fullName || "Not found",
           ocrValue: e.error
