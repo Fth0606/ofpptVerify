@@ -21,8 +21,12 @@ def normalize_value(value):
     """Clean and normalize extracted values."""
     if not value:
         return ""
+    # Remove common OCR artifacts at the beginning like 'ie)', 'e)', 'c)', 'l\''
+    value = re.sub(r'^[a-z]{0,2}\)\s*', '', value, flags=re.IGNORECASE)
     # Remove common separators and clean whitespace
-    value = re.sub(r'[:;=_\-><\[\]]', '', value)
+    value = re.sub(r'[:;=_\-><\[\]]', ' ', value)
+    # Remove redundant prefix noise
+    value = re.sub(r'^(?:A|EU|RO|DU)\s+', '', value)
     return value.strip()
 
 
@@ -86,7 +90,7 @@ def extract_names(text, keywords):
     patterns = {
         "Nom": r'(?i)Nom|Last\s*Name|Surname',
         "Prénom": r'(?i)Pr[ée]no[mn]|First\s*Name',
-        "Le candidat(e)": r'(?i)Le\s*candidat\(e\)|Candidature'
+        "Le candidat(e)": r'(?i)Le\s*candidat\(?[ée]?\)?|Candidature'
     }
 
     for line in lines:
@@ -162,8 +166,14 @@ def process_image(image_path):
                     elif 'prénom' in key or 'prenom' in key:
                         name_info['Prénom'] = value
 
-                if 'candidat' in line.lower() and i + 1 < len(lines):
-                    name_info['Le candidat(e)'] = lines[i + 1].strip()
+                if 'candidat' in line.lower():
+                    # Check if the name is on the same line after a separator
+                    potential_value = re.sub(r'(?i).*candidat\(?[ée]?\)?\s*[:\s]+', '', line).strip()
+                    if potential_value and len(potential_value) > 3:
+                        name_info['Le candidat(e)'] = potential_value
+                    elif i + 1 < len(lines):
+                        # Otherwise check the next line
+                        name_info['Le candidat(e)'] = lines[i + 1].strip()
 
         if name_info:
             return name_info
