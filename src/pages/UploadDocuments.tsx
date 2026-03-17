@@ -105,11 +105,18 @@ const UploadDocuments = () => {
 
       const namesMatchStrict = (name1: string, name2: string): boolean => {
         if (!name1 || !name2) return false;
-        const words1 = name1.toLowerCase().split(/\s+/).filter(w => w.length > 1).sort();
-        const words2 = name2.toLowerCase().split(/\s+/).filter(w => w.length > 1).sort();
-        if (words1.length === 0 || words2.length === 0) return false;
-        if (words1.length !== words2.length) return false;
-        return words1.every((w, i) => w === words2[i]);
+        
+        // 1. Remove all spaces and non-alphanumeric chars
+        const n1_clean = name1.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        const n2_clean = name2.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        
+        if (n1_clean === n2_clean) return true;
+        
+        // 2. Sort characters alphabetically to account for reversed names (e.g. MOHAMMED TABSART vs TABSART MOHAMMED)
+        const n1_sorted = n1_clean.split('').sort().join('');
+        const n2_sorted = n2_clean.split('').sort().join('');
+        
+        return n1_sorted === n2_sorted;
       };
 
       const enhancedResults = ocrResults.map(res => {

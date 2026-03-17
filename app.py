@@ -31,22 +31,21 @@ def normalize_value(value):
 
 
 def names_match(name1, name2):
-    """Check if two names match regardless of word order. Strict on characters but flexible on order."""
+    """Check if two names match regardless of word order and spaces. Strict on characters."""
     if not name1 or not name2:
         return False
     
-    # Normalize and split into words
-    words1 = sorted(re.findall(r'\w+', name1.lower()))
-    words2 = sorted(re.findall(r'\w+', name2.lower()))
+    n1_nospace = ''.join(c.lower() for c in name1 if c.isalnum())
+    n2_nospace = ''.join(c.lower() for c in name2 if c.isalnum())
     
-    # Filter out short noise words
-    words1 = [w for w in words1 if len(w) > 1]
-    words2 = [w for w in words2 if len(w) > 1]
+    if n1_nospace == n2_nospace:
+        return True
     
-    if not words1 or not words2:
-        return False
-        
-    return words1 == words2
+    # Sort characters to account for docTR line-reading order (e.g. MOHAMMED TABSART vs TABSART MOHAMMED)
+    n1_sorted = ''.join(sorted(n1_nospace))
+    n2_sorted = ''.join(sorted(n2_nospace))
+    
+    return n1_sorted == n2_sorted
 
 
 def reformat_name(name_info):
