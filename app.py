@@ -21,36 +21,13 @@ def normalize_value(value):
     """Clean and normalize extracted values."""
     if not value:
         return ""
-    #Strip common OCR artifacts at the beginning like "ie)", "(e)", "e)", "i)"
-    value = re.sub(r'^\s*[\(\[\]]*[a-zA-Z]{1,2}[\)\}\]>]\s*', '', value)
-    
-    # Strip leading single/two-letter noise words that are likely OCR fragments 
-    # from document headers (e.g., "A", "EU", "RO")
-    while True:
-        new_value = re.sub(r'^\s*(?:A|EU|LE|DE|LA|DU|RO|MA|ET)\b\s*', '', value, flags=re.IGNORECASE)
-        if new_value == value:
-            break
-        value = new_value
-        # Remove common separators and clean whitespace
-    value = re.sub(r'[:;=_\-><\[\]\(\)]', ' ', value)
-    return " ".join(value.split())
-
-
-def levenshtein_distance(s1, s2):
-    if len(s1) < len(s2):
-        return levenshtein_distance(s2, s1)
-    if len(s2) == 0:
-        return len(s1)
-    previous_row = range(len(s2) + 1)
-    for i, c1 in enumerate(s1):
-        current_row = [i + 1]
-        for j, c2 in enumerate(s2):
-            insertions = previous_row[j + 1] + 1
-            deletions = current_row[j] + 1
-            substitutions = previous_row[j] + (c1 != c2)
-            current_row.append(min(insertions, deletions, substitutions))
-        previous_row = current_row
-    return previous_row[-1]
+    # Remove common OCR artifacts at the beginning like 'ie)', 'e)', 'c)', 'l\''
+    value = re.sub(r'^[a-z]{0,2}\)\s*', '', value, flags=re.IGNORECASE)
+    # Remove common separators and clean whitespace
+    value = re.sub(r'[:;=_\-><\[\]]', ' ', value)
+    # Remove redundant prefix noise
+    value = re.sub(r'^(?:A|EU|RO|DU)\s+', '', value)
+    return value.strip()
 
 
 def names_match(name1, name2):
@@ -112,11 +89,11 @@ def extract_names(text, keywords):
     patterns = {
         "Nom": r'(?i)Nom|Last\s*Name|Surname',
         "Prénom": r'(?i)Pr[ée]no[mn]|First\s*Name',
-        "Le candidat(e)": r'(?i)Le\s*candidat\(?e\)?|Candidat\(e\)|Candidat'
+        "Le candidat(e)": r'(?i)Le\s*candidat\(?[ée]?\)?|Candidature'
         
     }
 
-    for line in lines:
+    for i, line in enumerate(lines):
         for key, pattern in patterns.items():
             match = re.search(pattern, line)
             if match:
@@ -124,6 +101,23 @@ def extract_names(text, keywords):
                 value = line[match.end():].strip()
                 # Clean colon and whitespace
                 value = re.sub(r'[:\s=]+', ' ', value).strip()
+                
+                # Check for floating uppercase name fragments on previous lines for 'Le candidat(e)'
+                if key == "Le candidat(e)" and i > 0:
+                    extra_parts = []
+                    # Look back up to 3 lines
+                    for j in range(max(0, i-3), i):
+                        # clean noise
+                        clean_prev = lines[j].strip()
+                        # Strict check: only A-Z and spaces, must be mostly alphabetical
+                        if bool(re.match(r'^[A-Z\s]+$', clean_prev)) and len(clean_prev) > 2:
+                            words = clean_prev.split()
+                            # skip common headers in case
+                            if any(len(w) > 2 for w in words) and clean_prev not in ["ROYAUME", "MAROC", "CARTE", "NATIONALE"]:
+                                extra_parts.append(clean_prev)
+                    if extra_parts:
+                        value = " ".join(extra_parts) + " " + value
+
                 if value and len(value) > 2: # Ignore noise
                     name_info[key] = value
                 break
@@ -199,16 +193,16 @@ def process_image(image_path):
                     if any(f in l_upper for f in ["NÉ LE", "NE LE", "VALABLE", "MAJMAA", "TOLBA", "KHEMISSET"]):
                         break
                     # Clean the line and see if it's a name part (all caps)
-                    clean_line = re.sub(r'[^A-Z\s]', '', line.strip())
-                    if len(clean_line) > 2 and clean_line.isupper():
-                        # Further filter out any lingering headers
+                    # Exclude lines with any lowercase letters to avoid multi-case noise like "EU aibgil"
+                    if not any(c.islower() for c in line) and len(re.sub(r'[^A-Z]', '', line)) > 1:
+                        clean_line = re.sub(r'[^A-Z\s]', '', line.strip())
                         words = clean_line.split()
-                        filtered_words = [w for w in words if w not in cin_blacklist]
+                        filtered_words = [w for w in words if w not in cin_blacklist and len(w) > 1]
                         if filtered_words:
                             cin_name_parts.append(" ".join(filtered_words))
             
             if cin_name_parts:
-                return {"Le candidat(e)": " ".join(cin_name_parts)}
+                name_info["Le candidat(e)"] = " ".join(cin_name_parts)
 
 
         if not name_info:
@@ -229,11 +223,12 @@ def process_image(image_path):
                         name_info['Prénom'] = value
 
                 if 'candidat' in line.lower():
-                    # Check same line first
-                    match = re.search(r'(?i)candidat\(?e\)?[\s:]+([A-Z\s]{3,})', line)
-                    if match:
-                        name_info['Le candidat(e)'] = match.group(1).strip()
+                    # Check if the name is on the same line after a separator
+                    potential_value = re.sub(r'(?i).*candidat\(?[ée]?\)?\s*[:\s]+', '', line).strip()
+                    if potential_value and len(potential_value) > 3:
+                        name_info['Le candidat(e)'] = potential_value
                     elif i + 1 < len(lines):
+                        # Otherwise check the next line
                         name_info['Le candidat(e)'] = lines[i + 1].strip()
 
         final_data = name_info if name_info else {}
@@ -241,11 +236,11 @@ def process_image(image_path):
         # 4. Fallback: Extract capitalized words (last resort)
         if not final_data:
             capital_words = extract_capital_words(result)
-        if 2 <= len(capital_words) <= 5:
+            if 2 <= len(capital_words) <= 5:
                 final_data = {
                     "Prénom": capital_words[0],
                     "Nom": " ".join(capital_words[1:])
-            }
+                }
         # 5. Extract Date of Birth and CIN (common for all IDs)
         # Date pattern: DD.MM.YYYY, DD-MM-YYYY, DD/MM/YYYY, or with colon due to OCR error
         dob_match = re.search(r'(?i)(?:n[ée]\s*le|date\s*de\s*naissance)[:\s]+(\d{1,2}[\.\-\/:]\d{1,2}[\.\-\/:]\d{4})', extracted_text)
