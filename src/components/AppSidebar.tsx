@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/students", label: "All Students", icon: Users },
+  { to: "/students", label: "Verification Panel", icon: ShieldCheck },
   { to: "/import", label: "Import Excel", icon: FileUp },
   { to: "/upload", label: "Upload Documents", icon: Upload },
   { to: "/mismatched", label: "Mismatched", icon: AlertTriangle },

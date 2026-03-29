@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -36,6 +37,7 @@ const UploadDocuments = () => {
   const [progress, setProgress] = useState(0);
   const [results, setResults] = useState<OCRResult[]>([]);
   const [done, setDone] = useState(false);
+  const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
 
@@ -71,186 +73,33 @@ const UploadDocuments = () => {
         }
         setProgress(30);
         zipBlob = await zip.generateAsync({ type: "blob" });
-        setProgress(50);
       }
 
-      const formData = new FormData();
-      formData.append("file", zipBlob, isZip ? files[0].name : "documents.zip");
+      setProgress(70);
 
-      const ocrUrl = apiService.getOcrUrl();
-      const response = await fetch(`${ocrUrl}/validate`, {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to process documents");
-      }
-
-      const rawResponse = await response.json();
-
-      if (rawResponse.error) {
-        throw new Error(rawResponse.error);
-      }
-
-      if (!Array.isArray(rawResponse)) {
-        throw new Error("Invalid response format from OCR service");
-      }
-
-      const ocrResults: OCRResult[] = rawResponse;
-
-
-      // Get all students from database to verify names
+      const response = await apiService.bulkUploadDocuments(zipBlob as File);
+      
       const allStudents = await apiService.fetchStudents();
-
-      const namesMatchStrict = (name1: string, name2: string): boolean => {
-        if (!name1 || !name2) return false;
-        
-        // 1. Remove all spaces and non-alphanumeric chars
-        const n1_clean = name1.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-        const n2_clean = name2.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-        
-        if (n1_clean === n2_clean) return true;
-        
-        // 2. Sort characters alphabetically to account for reversed names (e.g. MOHAMMED TABSART vs TABSART MOHAMMED)
-        const n1_sorted = n1_clean.split('').sort().join('');
-        const n2_sorted = n2_clean.split('').sort().join('');
-        
-        return n1_sorted === n2_sorted;
-      };
-
-      const enhancedResults = ocrResults.map(res => {
-        const student = allStudents.find(s => s.cin.toLowerCase() === res.cin.toLowerCase());
-        let finalCorrect = res.is_correct; // Start with backend assessment
-        let dbMismatch = false;
-
-        const mismatches: any[] = [];
-
-        if (student) {
-          res.file_details.forEach(detail => {
-            // 1. Verify Name
-            if (detail.extracted_name) {
-              const isMatch = namesMatchStrict(detail.extracted_name, student.fullName);
-              if (!isMatch) {
-                finalCorrect = false;
-                dbMismatch = true;
-                mismatches.push({
-                  document: detail.file,
-                  field: "Name",
-                  excelValue: student.fullName,
-                  ocrValue: detail.extracted_name
-                });
-              }
-            } else {
-              finalCorrect = false;
-              mismatches.push({
-                document: detail.file,
-                field: "OCR",
-                excelValue: student.fullName,
-                ocrValue: "Name extraction failed"
-              });
-            }
-        // 2. Verify Date of Birth (if extracted, usually from CIN/Birth Certificate)
-            if (detail.extracted_dob && student.dateOfBirth) {
-              const normalizeDate = (dateStr: string) => {
-                const parts = dateStr.split(/[\.\-\/:]/);
-                if (parts.length !== 3) return dateStr.replace(/[^0-9]/g, '');
-                
-                // If the first part is 4 digits, it's likely YYYY-MM-DD
-                if (parts[0].length === 4) {
-                  return parts[0] + parts[1].padStart(2, '0') + parts[2].padStart(2, '0');
-                }
-                // Otherwise assume DD-MM-YYYY or similar
-                return parts[2] + parts[1].padStart(2, '0') + parts[0].padStart(2, '0');
-              };
-
-              const normOCR = normalizeDate(detail.extracted_dob);
-              const normDB = normalizeDate(student.dateOfBirth);
-              
-              if (normOCR !== normDB) {
-                finalCorrect = false;
-                dbMismatch = true;
-                mismatches.push({
-                  document: detail.file,
-                  field: "Date of Birth",
-                  excelValue: student.dateOfBirth,
-                  ocrValue: detail.extracted_dob
-                });
-              }
-            }
-        // 3. Verify CIN (if extracted from the document itself)
-            if (detail.extracted_cin && student.cin) {
-              if (detail.extracted_cin.toLowerCase() !== student.cin.toLowerCase()) {
-                finalCorrect = false;
-                dbMismatch = true;
-                mismatches.push({
-                  document: detail.file,
-                  field: "CIN",
-                  excelValue: student.cin,
-                  ocrValue: detail.extracted_cin
-                });
-              }
-            }
-          });
-        } else {
-          finalCorrect = false;
-        }
-
-        // Add backend errors if any (like intra-folder mismatches)
-        res.errors.forEach(e => {
-          mismatches.push({
-            document: "backend",
-            field: "Error",
-            excelValue: student?.fullName || "N/A",
-            ocrValue: e.error
-          });
-        });
-
+      
+      setResults(Object.entries(response.counts || {}).map(([cin, count]) => {
+        const student = allStudents.find(s => s.cin.toUpperCase() === cin.toUpperCase());
         return {
-          ...res,
-          is_correct: finalCorrect,
-          db_mismatch: dbMismatch,
+          cin,
+          folder: cin,
+          is_correct: !!student,
+          verified_name: `${count} file(s) stored`,
           student_name: student?.fullName,
-          mismatch_details: mismatches
+          errors: [],
+          file_details: []
         };
-      });
+      }));
 
-      setResults(enhancedResults);
       setProgress(100);
       setDone(true);
-
-      // Bulk update student statuses in Laravel based on OCR results
-      const statusUpdates = enhancedResults.map(res => {
-        // Try to guess document types from file details
-        const fileData = res.file_details.reduce((acc: any, detail) => {
-          const name = detail.file.toLowerCase();
-          if (name.includes("cin") || name.includes("id")) acc.cin = detail.file;
-          else if (name.includes("bac")) acc.baccalaureate = detail.file;
-          else if (name.includes("naissance") || name.includes("birth")) acc.birth_certificate = detail.file;
-          return acc;
-        }, {});
-
-        return {
-          cin: res.cin,
-          status: res.is_correct ? "verified" : "mismatch",
-          documentsUploaded: res.file_details.length,
-          mismatch_details: res.mismatch_details,
-          document_paths: fileData
-        };
-      });
-
-      if (statusUpdates.length > 0) {
-        await apiService.bulkUpdateStatus(statusUpdates);
-      }
-
-      toast.success("Documents processed successfully");
+      toast.success("Documents uploaded and stored successfully");
     } catch (error: any) {
       console.error("Upload error:", error);
-      if (error.message === "Failed to fetch") {
-        toast.error("Could not connect to OCR service. Please ensure the Python backend is running on port 5001.");
-      } else {
-        toast.error(`Error: ${error.message || "An error occurred during document processing"}`);
-      }
+      toast.error(`Error: ${error.message || "An error occurred during document upload"}`);
     } finally {
       setUploading(false);
     }
@@ -336,8 +185,13 @@ const UploadDocuments = () => {
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center justify-between">
-              <span>OCR Processing Results</span>
-              <Badge variant="secondary">{results.length} students processed</Badge>
+              <span>Document Upload Summary</span>
+              <div className="flex gap-2 items-center">
+                <Badge variant="secondary">{results.length} students</Badge>
+                <Button size="sm" onClick={() => navigate("/students")} className="h-8">
+                  Go to Verification
+                </Button>
+              </div>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -349,7 +203,7 @@ const UploadDocuments = () => {
                     <span className="font-bold">CIN: {res.cin}</span>
                   </div>
                   <Badge variant={res.is_correct ? "success" : "destructive"}>
-                    {res.is_correct ? "Matched" : "Mismatch"}
+                    {res.is_correct ? "Linked to Student" : "Not Found"}
                   </Badge>
                 </div>
 

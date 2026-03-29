@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { groupByFiliereClasse, type StudentMismatch } from "@/lib/mock-data";
 import { exportMismatchedToExcel, exportMismatchedToPDF } from "@/lib/export-utils";
 import { AlertTriangle, ChevronDown, ChevronUp, FileDown, FileSpreadsheet } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import { apiService, Student } from "@/lib/api-service";
 import { toast } from "sonner";
 
@@ -109,7 +109,7 @@ const MismatchedStudents = () => {
                         const mm = getMismatches(student);
                         const isExpanded = expandedStudent === student.id;
                         return (
-                          <>
+                          <Fragment key={student.id}>
                             <TableRow
                               key={student.id}
                               className="cursor-pointer hover:bg-warning/5"
@@ -137,20 +137,24 @@ const MismatchedStudents = () => {
                                     <p className="text-sm font-semibold text-destructive">Mismatch Details:</p>
                                     {mm.mismatches.map((m, i) => (
                                       <div key={i} className="flex items-center gap-4 rounded-lg border border-destructive/20 bg-background p-3">
-                                        <Badge variant="outline" className="text-xs shrink-0">{docLabel(m.document)}</Badge>
-                                        <div className="flex-1 grid grid-cols-3 gap-2 text-sm">
-                                          <span className="font-medium">{m.field}</span>
-                                          <span>Excel: <strong>{m.excelValue}</strong></span>
-                                          <span>Document: <strong className="text-destructive">{m.ocrValue}</strong></span>
+                                        <Badge variant="outline" className="text-xs shrink-0">{docLabel(m.document || "OCR")}</Badge>
+                                        <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
+                                          <span className="font-medium text-destructive">{m.field || "Difference"}</span>
+                                          <span className="truncate">Excel: <strong>{m.excelValue || "N/A"}</strong></span>
+                                          <span className="truncate">Document: <strong className="text-destructive">{m.ocrValue || "Empty"}</strong></span>
                                         </div>
                                       </div>
                                     ))}
-                                    <p className="text-xs text-muted-foreground mt-2">Parent: {student.parentName} · Bac Year: {student.bacYear}</p>
+                                    <div className="mt-4 pt-4 border-t border-destructive/10 grid grid-cols-3 gap-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                      <div>CIN: <span className="text-foreground">{student.cin}</span></div>
+                                      <div>Student: <span className="text-foreground">{student.fullName}</span></div>
+                                      <div>Bac Year: <span className="text-foreground">{student.bacYear}</span></div>
+                                    </div>
                                   </div>
                                 </TableCell>
                               </TableRow>
                             )}
-                          </>
+                          </Fragment>
                         );
                       })}
                     </TableBody>

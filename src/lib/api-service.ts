@@ -109,5 +109,34 @@ export const apiService = {
     });
     if (!response.ok) throw new Error("Failed to upload document");
     return response.json();
+  },
+
+  async bulkUploadDocuments(file: File): Promise<any> {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const response = await fetch(`${API_URL}/students/bulk-upload-documents`, {
+      method: "POST",
+      headers: getHeaders(false),
+      body: formData,
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || errorData.message || "Failed to bulk upload documents");
+    }
+    return response.json();
+  },
+
+  async verifyGroup(group: string): Promise<any[]> {
+    const response = await fetch(`${API_URL}/students/verify-group`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ group }),
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || errorData.message || "Failed to verify group");
+    }
+    return response.json();
   }
 };
