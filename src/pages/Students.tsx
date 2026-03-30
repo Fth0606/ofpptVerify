@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Filter, ArrowUpDown, MoreHorizontal, User, Trash2, Eye, CheckCircle2, AlertCircle, FileWarning, XCircle, ShieldCheck } from "lucide-react";
+import { Search, Filter, ArrowUpDown, MoreHorizontal, User, Trash2, Eye, CheckCircle2, AlertCircle, FileWarning, XCircle, ShieldCheck, FileCheck, FileX } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { apiService, Student } from "@/lib/api-service";
 import { toast } from "sonner";
@@ -88,16 +88,29 @@ const Students = () => {
       return;
     }
 
+    // Check if any student in the filtered group has documents
+    const groupStudents = students.filter(s => s.group === groupFilter);
+    const withDocs = groupStudents.filter(s => (s.documentsUploaded ?? 0) > 0 || (s as any).documents_count > 0);
+    if (withDocs.length === 0) {
+      toast.warning(`No documents uploaded for group ${groupFilter} yet. Please upload documents first via "Upload Documents".`);
+      return;
+    }
+
     setIsVerifying(true);
     const toastId = toast.loading(`Verifying group ${groupFilter}... This may take a minute.`);
     
     try {
       const response = await apiService.verifyGroup(groupFilter);
       setResults(response);
-      toast.success(`Verification for group ${groupFilter} completed!`, { id: toastId });
+      toast.success(`Verification for group ${groupFilter} completed! ${response.length} students processed.`, { id: toastId });
       fetchStudents(); // Refresh data
     } catch (error: any) {
-      toast.error(`Verification failed: ${error.message}`, { id: toastId });
+      const msg = error.message || "Verification failed";
+      if (msg.includes("No documents")) {
+        toast.warning(`No documents uploaded for this group yet. Upload documents first.`, { id: toastId });
+      } else {
+        toast.error(`Verification failed: ${msg}`, { id: toastId });
+      }
       console.error(error);
     } finally {
       setIsVerifying(false);
@@ -192,13 +205,14 @@ const Students = () => {
                   <TableHead className="text-white font-bold uppercase py-4">Filière <ArrowUpDown className="inline h-3 w-3" /></TableHead>
                   <TableHead className="text-white font-bold uppercase py-4">Classe <ArrowUpDown className="inline h-3 w-3" /></TableHead>
                   <TableHead className="text-white font-bold uppercase py-4">Age <ArrowUpDown className="inline h-3 w-3" /></TableHead>
+                  <TableHead className="text-white font-bold uppercase py-4 text-center">Docs</TableHead>
                   <TableHead className="text-white font-bold uppercase py-4 text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">Loading students...</TableCell>
+                    <TableCell colSpan={8} className="text-center py-8">Loading students...</TableCell>
                   </TableRow>
                 ) : filteredStudents.length > 0 ? (
                   filteredStudents.map((student) => {
@@ -231,26 +245,65 @@ const Students = () => {
                         <TableCell className="py-4">{student.filiere || "-"}</TableCell>
                         <TableCell className="py-4 font-mono text-sm">{student.classe || "-"}</TableCell>
                         <TableCell className="py-4">{calculateAge(student.dateOfBirth)}</TableCell>
+                        <TableCell className="text-center py-4">
+                          {(() => {
+                            // documents_count is returned by withCount('documents') on the backend
+                            const actualCount = (student as any).documents_count ?? student.documentsUploaded ?? 0;
+                            if (actualCount >= 3) {
+                              return (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-green-100 dark:bg-green-900/30 px-2.5 py-1 text-xs font-semibold text-green-700 dark:text-green-400">
+                                  <FileCheck className="h-3 w-3" />
+                                  {actualCount}/3
+                                </span>
+                              );
+                            } else if (actualCount > 0) {
+                              return (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 dark:bg-yellow-900/30 px-2.5 py-1 text-xs font-semibold text-yellow-700 dark:text-yellow-400">
+                                  <FileCheck className="h-3 w-3" />
+                                  {actualCount}/3
+                                </span>
+                              );
+                            } else {
+                              return (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-red-100 dark:bg-red-900/30 px-2.5 py-1 text-xs font-semibold text-red-600 dark:text-red-400">
+                                  <FileX className="h-3 w-3" />
+                                  0/3
+                                </span>
+                              );
+                            }
+                          })()}
+                        </TableCell>
                         <TableCell className="text-center py-4" onClick={(e) => e.stopPropagation()}>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            className="h-8 px-4 bg-red-600 hover:bg-red-700"
-                            onClick={() => {
-                              setStudentToDelete(student);
-                              setIsDeleteDialogOpen(true);
-                            }}
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete
-                          </Button>
+                          <div className="flex items-center justify-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 px-3 border-blue-300 text-blue-700 hover:bg-blue-50 hover:text-blue-800 hover:border-blue-400"
+                              onClick={() => navigate(`/students/${student.id}`)}
+                            >
+                              <Eye className="mr-1.5 h-3.5 w-3.5" />
+                              Show
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              className="h-8 px-3 bg-red-600 hover:bg-red-700"
+                              onClick={() => {
+                                setStudentToDelete(student);
+                                setIsDeleteDialogOpen(true);
+                              }}
+                            >
+                              <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                              Delete
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
                   })
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                       No students found matching your criteria
                     </TableCell>
                   </TableRow>

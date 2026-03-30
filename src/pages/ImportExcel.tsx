@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileUp, FileSpreadsheet, Check } from "lucide-react";
+import { FileUp, FileSpreadsheet, Check, Info, Star } from "lucide-react";
 import * as XLSX from "xlsx";
 import { apiService } from "@/lib/api-service";
 import { toast } from "sonner";
@@ -114,12 +114,95 @@ const ImportExcel = () => {
     }
   };
 
+  const excelColumns = [
+    { name: "cin",              example: "AB123456",    required: true,  description: "Numéro CIN de l'étudiant" },
+    { name: "nom",              example: "ALAOUI",       required: true,  description: "Nom de famille" },
+    { name: "prenom",           example: "Fatima",       required: true,  description: "Prénom" },
+    { name: "date de naissance",example: "2001-05-14",  required: true,  description: "Format YYYY-MM-DD" },
+    { name: "lieu de naissance",example: "Casablanca",  required: false, description: "Ville de naissance" },
+    { name: "cne",              example: "G123456789",  required: false, description: "Code national étudiant" },
+    { name: "filiere",          example: "Développement Digital", required: false, description: "Filière / branche" },
+    { name: "classe",           example: "TC-INFO",     required: false, description: "Classe" },
+    { name: "groupe",           example: "G1",          required: false, description: "Groupe" },
+    { name: "nom du parent",    example: "Hassan ALAOUI",required: false, description: "Nom du parent tuteur" },
+    { name: "année du bac",     example: "2020",        required: false, description: "Année du baccalauréat" },
+    { name: "moyenne du bac",   example: "14.5",        required: false, description: "Moyenne du bac" },
+    { name: "mention du bac",   example: "Bien",        required: false, description: "Mention obtenue" },
+  ];
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Import Student Data</h1>
         <p className="text-muted-foreground">Upload an Excel file with student records</p>
       </div>
+
+      {/* Excel Structure Guide */}
+      <Card className="border-blue-200 bg-blue-50/40 dark:border-blue-800 dark:bg-blue-950/20">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/50">
+              <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div>
+              <CardTitle className="text-base text-blue-800 dark:text-blue-200">Structure requise du fichier Excel</CardTitle>
+              <CardDescription className="text-blue-600/80 dark:text-blue-400/80">
+                Votre fichier Excel doit contenir les colonnes suivantes (la première ligne doit être l'en-tête)
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto rounded-b-xl">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-blue-200 dark:border-blue-800 bg-blue-100/60 dark:bg-blue-900/30">
+                  <th className="px-4 py-2 text-left font-semibold text-blue-800 dark:text-blue-200">Nom de colonne</th>
+                  <th className="px-4 py-2 text-left font-semibold text-blue-800 dark:text-blue-200">Exemple</th>
+                  <th className="px-4 py-2 text-left font-semibold text-blue-800 dark:text-blue-200">Description</th>
+                  <th className="px-4 py-2 text-left font-semibold text-blue-800 dark:text-blue-200">Statut</th>
+                </tr>
+              </thead>
+              <tbody>
+                {excelColumns.map((col, i) => (
+                  <tr
+                    key={col.name}
+                    className={`border-b border-blue-100 dark:border-blue-900/50 ${
+                      i % 2 === 0
+                        ? "bg-white/60 dark:bg-blue-950/10"
+                        : "bg-blue-50/40 dark:bg-blue-950/20"
+                    }`}
+                  >
+                    <td className="px-4 py-2">
+                      <code className="rounded bg-blue-100 dark:bg-blue-900/50 px-1.5 py-0.5 font-mono text-xs text-blue-800 dark:text-blue-300">
+                        {col.name}
+                      </code>
+                    </td>
+                    <td className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">{col.example}</td>
+                    <td className="px-4 py-2 text-gray-500 dark:text-gray-400">{col.description}</td>
+                    <td className="px-4 py-2">
+                      {col.required ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-red-100 dark:bg-red-900/30 px-2 py-0.5 text-xs font-medium text-red-700 dark:text-red-400">
+                          <Star className="h-2.5 w-2.5" />
+                          Obligatoire
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-800 px-2 py-0.5 text-xs font-medium text-gray-500 dark:text-gray-400">
+                          Optionnel
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex items-start gap-2 p-4 text-xs text-blue-600/80 dark:text-blue-400/80">
+            <Star className="mt-0.5 h-3 w-3 shrink-0 text-red-500" />
+            <span>Les colonnes <strong>obligatoires</strong> doivent être présentes pour que l'import fonctionne correctement. Les colonnes optionnelles peuvent être omises.</span>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Upload Area */}
       <Card>

@@ -13,8 +13,15 @@ class Student extends Model
 
     protected $casts = [
         'mismatch_details' => 'array',
-        'document_paths' => 'array',
     ];
+
+    /**
+     * A student has many documents stored in the database.
+     */
+    public function documents()
+    {
+        return $this->hasMany(Document::class);
+    }
 
     /**
      * Find a student by either their database ID or their unique student_id.
