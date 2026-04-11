@@ -25,24 +25,24 @@ const statusBadge = (status: string) => {
   switch (status) {
     case "verified": return <Badge className="bg-green-100 text-green-700 border-0">✅ Verified</Badge>;
     case "mismatch": return <Badge className="bg-yellow-100 text-yellow-700 border-0">⚠️ Mismatch</Badge>;
-    case "pending":  return <Badge variant="secondary">⏳ Pending</Badge>;
-    case "missing":  return <Badge variant="destructive">❌ Missing</Badge>;
-    default:         return <Badge variant="secondary">{status}</Badge>;
+    case "pending": return <Badge variant="secondary">⏳ Pending</Badge>;
+    case "missing": return <Badge variant="destructive">❌ Missing</Badge>;
+    default: return <Badge variant="secondary">{status}</Badge>;
   }
 };
 
 const ocrStatusIcon = (status: string) => {
   switch (status) {
     case "processed": return <CheckCircle2 className="h-3 w-3 text-green-500" />;
-    case "failed":    return <AlertCircle className="h-3 w-3 text-red-500" />;
-    default:          return <Clock className="h-3 w-3 text-yellow-500" />;
+    case "failed": return <AlertCircle className="h-3 w-3 text-red-500" />;
+    default: return <Clock className="h-3 w-3 text-yellow-500" />;
   }
 };
 
 const DOC_TYPES: { key: StudentDocument["type"]; label: string; icon: any }[] = [
   { key: "birth_certificate", label: "Birth Certificate", icon: FileText },
-  { key: "baccalaureate",     label: "Baccalaureate",     icon: GraduationCap },
-  { key: "cin",               label: "CIN (ID Card)",     icon: CreditCard },
+  { key: "baccalaureate", label: "Baccalaureate", icon: GraduationCap },
+  { key: "cin", label: "CIN (ID Card)", icon: CreditCard },
 ];
 
 const formatBytes = (bytes: number) => {
@@ -54,11 +54,11 @@ const formatBytes = (bytes: number) => {
 const StudentDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [student, setStudent]             = useState<Student | null>(null);
-  const [documents, setDocuments]         = useState<StudentDocument[]>([]);
-  const [loading, setLoading]             = useState(true);
+  const [student, setStudent] = useState<Student | null>(null);
+  const [documents, setDocuments] = useState<StudentDocument[]>([]);
+  const [loading, setLoading] = useState(true);
   const [uploadingType, setUploadingType] = useState<string | null>(null);
-  const [docToDelete, setDocToDelete]     = useState<StudentDocument | null>(null);
+  const [docToDelete, setDocToDelete] = useState<StudentDocument | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchAll = async () => {
@@ -171,13 +171,13 @@ const StudentDetail = () => {
           <CardHeader><CardTitle className="text-base">Personal Information</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             {[
-              ["Last Name (Nom)",   student.lastName  || "-"],
+              ["Last Name (Nom)", student.lastName || "-"],
               ["First Name (Prénom)", student.firstName || "-"],
-              ["Full Name",         student.fullName],
-              ["Date of Birth",     student.dateOfBirth],
-              ["Birthplace",        student.birthplace],
-              ["CIN",               student.cin],
-              ["Parent Name",       student.parentName],
+              ["Full Name", student.fullName],
+              ["Date of Birth", student.dateOfBirth],
+              ["Birthplace", student.birthplace],
+              ["CIN", student.cin],
+              ["Parent Name", student.parentName],
             ].map(([label, value]) => (
               <div key={label} className="flex justify-between text-sm">
                 <span className="text-muted-foreground">{label}</span>
@@ -191,12 +191,12 @@ const StudentDetail = () => {
           <CardHeader><CardTitle className="text-base">Academic Information</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             {[
-              ["Filière",    student.filiere],
-              ["Classe",     student.classe],
-              ["Group",      student.group],
-              ["Bac Year",   student.bacYear],
-              ["Bac Score",  student.bacScore],
-              ["Bac Mention",student.bacMention],
+              ["Filière", student.filiere],
+              ["Classe", student.classe],
+              ["Group", student.group],
+              ["Bac Year", student.bacYear],
+              ["Bac Score", student.bacScore],
+              ["Bac Mention", student.bacMention],
             ].map(([label, value]) => (
               <div key={label} className="flex justify-between text-sm">
                 <span className="text-muted-foreground">{label}</span>
@@ -238,11 +238,10 @@ const StudentDetail = () => {
               return (
                 <div
                   key={docType.key}
-                  className={`flex flex-col gap-3 rounded-xl border-2 p-5 transition-all ${
-                    doc
+                  className={`flex flex-col gap-3 rounded-xl border-2 p-5 transition-all ${doc
                       ? "border-green-300 bg-green-50/40 dark:bg-green-950/20"
                       : "border-dashed border-border"
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-2">
                     <Icon className={`h-6 w-6 ${doc ? "text-green-600" : "text-muted-foreground"}`} />

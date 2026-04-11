@@ -93,11 +93,20 @@ export const dashboardStats = {
 /** Group students by filière then classe */
 export function groupByFiliereClasse(students: Student[]): Record<string, Record<string, Student[]>> {
   const grouped: Record<string, Record<string, Student[]>> = {};
-  const sorted = [...students].sort((a, b) => a.filiere.localeCompare(b.filiere) || a.classe.localeCompare(b.classe));
+  const sorted = [...students].sort((a, b) => {
+    const filiereA = a.filiere || "Unknown Filiere";
+    const filiereB = b.filiere || "Unknown Filiere";
+    const classeA = a.classe || "Unknown Classe";
+    const classeB = b.classe || "Unknown Classe";
+    return filiereA.localeCompare(filiereB) || classeA.localeCompare(classeB);
+  });
+  
   for (const s of sorted) {
-    if (!grouped[s.filiere]) grouped[s.filiere] = {};
-    if (!grouped[s.filiere][s.classe]) grouped[s.filiere][s.classe] = [];
-    grouped[s.filiere][s.classe].push(s);
+    const f = s.filiere || "Unknown Filiere";
+    const c = s.classe || "Unknown Classe";
+    if (!grouped[f]) grouped[f] = {};
+    if (!grouped[f][c]) grouped[f][c] = [];
+    grouped[f][c].push(s);
   }
   return grouped;
 }

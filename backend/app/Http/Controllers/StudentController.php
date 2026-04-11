@@ -206,6 +206,15 @@ class StudentController extends Controller
      */
     public function uploadDocument(Request $request, $id)
     {
+        // Prevent timeout
+        set_time_limit(0);
+
+        try {
+            \Illuminate\Support\Facades\DB::statement("SET GLOBAL max_allowed_packet=134217728");
+        } catch (\Exception $e) {
+            // Ignore
+        }
+
         $request->validate([
             'document' => 'required|file|mimes:jpg,jpeg,png,pdf|max:10240',
             'type'     => 'required|string|in:birth_certificate,baccalaureate,cin,other',
@@ -219,7 +228,7 @@ class StudentController extends Controller
         $mimeType  = $file->getMimeType();
         $fileSize  = $file->getSize();
         $filename  = $file->getClientOriginalName();
-        $base64    = base64_encode(file_get_contents($file->getRealPath()));
+        $base64    = $this->compressImage($file->getRealPath(), $mimeType);
 
         // Replace existing doc of same type for this student
         Document::where('student_id', $student->id)
@@ -252,6 +261,16 @@ class StudentController extends Controller
      */
     public function bulkUploadDocuments(Request $request)
     {
+        // Prevent timeout during large uploads
+        set_time_limit(0);
+
+        try {
+            // Attempt to proactively increase max_allowed_packet for large base64 strings
+            \Illuminate\Support\Facades\DB::statement("SET GLOBAL max_allowed_packet=134217728");
+        } catch (\Exception $e) {
+            // Ignore if no SUPER privilege
+        }
+
         $request->validate(['file' => 'required|file|mimes:zip|max:102400']);
 
         $zipFile  = $request->file('file');
@@ -284,7 +303,7 @@ class StudentController extends Controller
                     $mimeMap  = ['jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'pdf' => 'application/pdf'];
                     $mimeType = $mimeMap[$ext] ?? 'application/octet-stream';
                     $type     = Document::detectType($filename);
-                    $base64   = base64_encode(file_get_contents($file->getRealPath()));
+                    $base64   = $this->compressImage($file->getRealPath(), $mimeType);
 
                     // Replace existing doc of same type
                     Document::where('student_id', $student->id)
@@ -336,7 +355,7 @@ class StudentController extends Controller
 
     public function verifyGroup(Request $request)
     {
-        set_time_limit(180);
+        set_time_limit(0);
         $groupName = $request->input('group');
         $students  = Student::where('group', $groupName)->with('documents')->get();
 
@@ -391,7 +410,7 @@ class StudentController extends Controller
 
         try {
             $ocrUrl   = env('OCR_SERVICE_URL', 'http://localhost:5001');
-            $response = Http::timeout(120)
+            $response = Http::timeout(3600)
                 ->attach('file', file_get_contents($zipPath), 'verify.zip')
                 ->post($ocrUrl . '/validate');
 
@@ -491,11 +510,111 @@ class StudentController extends Controller
     private function namesMatch($n1, $n2): bool
     {
         if (empty($n1) || empty($n2)) return false;
-        $n1 = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $n1));
-        $n2 = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $n2));
-        if ($n1 === $n2) return true;
-        $s1 = str_split($n1); sort($s1); $s1 = implode('', $s1);
-        $s2 = str_split($n2); sort($s2); $s2 = implode('', $s2);
-        return $s1 === $s2;
+        
+        $clean = function($name) {
+            return strtolower(trim(preg_replace('/[^a-zA-Z0-9\s]/', ' ', $name)));
+        };
+
+        $n1_clean = $clean($n1);
+        $n2_clean = $clean($n2);
+        
+        if ($n1_clean === $n2_clean) return true;
+        
+        $words1 = array_values(array_filter(explode(' ', $n1_clean)));
+        $words2 = array_values(array_filter(explode(' ', $n2_clean)));
+        
+        if (empty($words1) || empty($words2)) return false;
+        
+        // Exact words subset match
+        $intersect = array_intersect($words1, $words2);
+        $minLen = min(count($words1), count($words2));
+        if (count($intersect) >= $minLen && $minLen > 0) {
+            return true;
+        }
+
+        // Fuzzy match per word
+        $matchedWords = 0;
+        foreach ($words1 as $w1) {
+            foreach ($words2 as $w2) {
+                similar_text($w1, $w2, $percent);
+                if ($percent > 85 || levenshtein($w1, $w2) <= 1) { // 1 typo allowed per word, or 85% similarity
+                    $matchedWords++;
+                    break;
+                }
+            }
+        }
+        if ($matchedWords >= count($words1) || $matchedWords >= count($words2)) {
+            return true;
+        }
+
+        // Failsafe string match (scrambled characters or small typo over whole string)
+        $n1_no_space = str_replace(' ', '', $n1_clean);
+        $n2_no_space = str_replace(' ', '', $n2_clean);
+        
+        if ($n1_no_space === $n2_no_space) return true;
+        
+        $s1 = str_split($n1_no_space); sort($s1); $s1 = implode('', $s1);
+        $s2 = str_split($n2_no_space); sort($s2); $s2 = implode('', $s2);
+        
+        if ($s1 === $s2) return true;
+        
+        similar_text($n1_no_space, $n2_no_space, $percent_overall);
+        if ($percent_overall > 85) return true;
+        
+        similar_text($s1, $s2, $percent_sorted);
+        if ($percent_sorted > 85) return true;
+        
+        return false;
+    }
+
+    private function compressImage($filePath, $mimeType) {
+        if (!in_array($mimeType, ['image/jpeg', 'image/png', 'image/jpg'])) {
+            return base64_encode(file_get_contents($filePath));
+        }
+
+        $image = null;
+        if ($mimeType === 'image/jpeg' || $mimeType === 'image/jpg') {
+            $image = @imagecreatefromjpeg($filePath);
+        } elseif ($mimeType === 'image/png') {
+            $image = @imagecreatefrompng($filePath);
+        }
+
+        if (!$image) {
+            return base64_encode(file_get_contents($filePath));
+        }
+
+        $width = imagesx($image);
+        $height = imagesy($image);
+        $maxSize = 1200;
+
+        if ($width > $maxSize || $height > $maxSize) {
+            $ratio = min($maxSize / $width, $maxSize / $height);
+            $newWidth = (int)($width * $ratio);
+            $newHeight = (int)($height * $ratio);
+
+            $newImage = imagecreatetruecolor($newWidth, $newHeight);
+
+            if ($mimeType === 'image/png') {
+                imagealphablending($newImage, false);
+                imagesavealpha($newImage, true);
+                $transparent = imagecolorallocatealpha($newImage, 255, 255, 255, 127);
+                imagefilledrectangle($newImage, 0, 0, $newWidth, $newHeight, $transparent);
+            }
+
+            imagecopyresampled($newImage, $image, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
+            imagedestroy($image);
+            $image = $newImage;
+        }
+
+        ob_start();
+        if ($mimeType === 'image/png') {
+            imagepng($image, null, 8);
+        } else {
+            imagejpeg($image, null, 70);
+        }
+        $compressedData = ob_get_clean();
+        imagedestroy($image);
+
+        return base64_encode($compressedData);
     }
 }

@@ -1,7 +1,5 @@
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
 const OCR_URL = import.meta.env.VITE_OCR_URL || "http://localhost:5001";
-const API_TOKEN = import.meta.env.VITE_API_TOKEN || "default-token-123";
-
 import { VerificationStatus } from "./mock-data";
 
 // ─────────────────────────────────────────────────────────
@@ -49,9 +47,7 @@ export interface Student {
 // ─────────────────────────────────────────────────────────
 
 const getHeaders = (isJson = true) => {
-  const headers: Record<string, string> = {
-    "X-API-TOKEN": API_TOKEN,
-  };
+  const headers: Record<string, string> = {};
   if (isJson) {
     headers["Content-Type"] = "application/json; charset=UTF-8";
   }

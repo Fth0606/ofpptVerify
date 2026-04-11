@@ -6,8 +6,6 @@ use Illuminate\Support\Facades\Route;
 // Public: serve document images (used in <img src="..."> tags — can't send headers)
 Route::get('/documents/{id}/file', [StudentController::class, 'serveDocument']);
 
-Route::middleware('api.token')->group(function () {
-
     // ── Students ──────────────────────────────────────────
     Route::get('/students',              [StudentController::class, 'index']);
     Route::get('/students/{id}',         [StudentController::class, 'show']);
@@ -25,4 +23,3 @@ Route::middleware('api.token')->group(function () {
 
     // ── Documents (individual operations) ────────────────
     Route::delete('/documents/{id}',     [StudentController::class, 'deleteDocument']);
-});

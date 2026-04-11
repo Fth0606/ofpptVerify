@@ -6,7 +6,6 @@ import {
   Upload,
   AlertTriangle,
   CheckCircle2,
-  LogOut,
   ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -56,12 +55,6 @@ export function AppSidebar() {
         })}
       </nav>
 
-      <div className="border-t border-sidebar-border p-3">
-        <button className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
-          <LogOut className="h-4 w-4" />
-          Sign Out
-        </button>
-      </div>
     </aside>
   );
 }
