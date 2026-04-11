@@ -6,3 +6,4 @@ paddlepaddle
 spacy
 opencv-python
 numpy
+python-dateutil

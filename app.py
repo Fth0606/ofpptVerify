@@ -12,6 +12,7 @@ import tempfile
 import re
 import json
 import shutil
+from dateutil import parser as dateutil_parser
 
 # Load OCR and NLP models
 try:
@@ -48,6 +49,65 @@ HEADERS = {
 
 WHITELIST = {"EL", "BEN", "ABD", "AL", "ID", "AIT"}
 
+# Birth date: only trust dates tied to these labels (FR + common OCR variants).
+BIRTH_LABEL_RE = re.compile(
+    r"(?i)n[ée]e?\s*\(?e?\)?\s*l[ée]|"
+    r"n[ée]\s*l[ée]|"
+    r"ne\s*le|"
+    r"date\s*de\s*naissance|"
+    r"naissance\s*[\(\)]?\s*l[ée]"
+)
+# Ignore dates that belong to validity / issue lines.
+DATE_INVALID_CONTEXT_RE = re.compile(
+    r"(?i)valable|jusqu|expir|"
+    r"d[ée]liv|d[ée]livr|"
+    r"[ée]tabli|"
+    r"signature|"
+    r"autorit[ée]"
+)
+
+# MRZ-style birth date on CNIE back (TD1 line 2: YYMMDD + sex + expiry YYMMDD)
+MRZ_LINE2_DOB_RE = re.compile(
+    r"(?<![0-9])(\d{2})(\d{2})(\d{2})\d[MF<](\d{2})(\d{2})(\d{2})"
+)
+
+DATE_IN_TEXT_RE = re.compile(
+    r"\b(\d{1,2}[\.\-\/\s]\d{1,2}[\.\-\/\s]\d{2,4})\b"
+)
+
+
+def sort_blocks_reading_order(ocr_blocks):
+    """Top-to-bottom, left-to-right order so labels stay near their values."""
+
+    def sort_key(item):
+        box, _ = item
+        if not box or len(box) < 4:
+            return (0, 0)
+        ys = [float(p[1]) for p in box]
+        xs = [float(p[0]) for p in box]
+        return (sum(ys) / len(ys), min(xs))
+
+    return sorted(ocr_blocks or [], key=sort_key)
+
+
+def extract_dob_from_mrz(full_text):
+    """Last resort: birth date from TD1-style MRZ line 2 (YYMMDD)."""
+    if not full_text:
+        return None
+    compact = re.sub(r"\s+", "", full_text)
+    m = MRZ_LINE2_DOB_RE.search(compact)
+    if not m:
+        return None
+    yy, mm, dd = m.group(1), m.group(2), m.group(3)
+    try:
+        year = 2000 + int(yy) if int(yy) <= 69 else 1900 + int(yy)
+        month_i, day_i = int(mm), int(dd)
+        if 1 <= month_i <= 12 and 1 <= day_i <= 31:
+            return normalize_date(f"{day_i:02d}/{month_i:02d}/{year}")
+    except ValueError:
+        pass
+    return None
+
 
 def normalize_value(value):
     """Clean and normalize extracted values."""
@@ -56,8 +116,8 @@ def normalize_value(value):
 
     # Remove common OCR artifacts (e.g., 'ie)', 'e)')
     value = re.sub(r'^[a-z]{0,2}\)\s*', '', value, flags=re.IGNORECASE)
-    # Remove common separators
-    value = re.sub(r'[:;=_\-><\[\]]', ' ', value)
+    # Remove ALL punctuation
+    value = re.sub(r'[^a-zA-Z\s\u00C0-\u017F]', ' ', value)
     # Remove redundant prefix noise
     value = re.sub(r'^(?:A|EU|RO|DU)\s+', '', value)
     
@@ -71,11 +131,7 @@ def normalize_value(value):
         elif not is_garbage_word(w) and w_up not in HEADERS:
             filtered_words.append(w)
             
-    value = " ".join(filtered_words)
-
-    # Stricter character filtering for names
-    value = re.sub(r'[^a-zA-Z\s\u00C0-\u017F]', ' ', value)
-    return ' '.join(value.split()).strip().upper()
+    return " ".join(filtered_words).strip().upper()
 
 
 def normalize_date(date_str):
@@ -93,6 +149,160 @@ def normalize_date(date_str):
         # Pad with zeros if necessary
         return f"{day.zfill(2)}/{month.zfill(2)}/{year}"
     return clean_date
+
+
+def parse_date_to_ddmmyyyy(date_fragment):
+    """Parse a date substring to strict DD/MM/YYYY using day-first (Morocco / FR)."""
+    if not date_fragment:
+        return None
+    clean = re.sub(r"[^0-9\.\-\/\s]", "", date_fragment).strip()
+    clean = re.sub(r"[\.\-\/\s]+", "/", clean)
+    parts = [p for p in clean.split("/") if p]
+    if len(parts) == 3:
+        d, m, y = parts[0], parts[1], parts[2]
+        if len(y) == 2:
+            y = "20" + y if int(y) <= 69 else "19" + y
+        try:
+            day_i, month_i, year_i = int(d), int(m), int(y)
+            if 1 <= day_i <= 31 and 1 <= month_i <= 12 and 1900 <= year_i <= 2100:
+                return f"{day_i:02d}/{month_i:02d}/{year_i}"
+        except ValueError:
+            pass
+    try:
+        dt = dateutil_parser.parse(date_fragment, dayfirst=True, fuzzy=False)
+        return f"{dt.day:02d}/{dt.month:02d}/{dt.year}"
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+
+def extract_birth_date_smart(full_text, ocr_blocks):
+    """
+    Prefer dates on the same line (or adjacent OCR region) as birth labels.
+    Avoids picking validity / expiry / issue dates that appear elsewhere on CIN.
+    """
+    if not full_text:
+        return None
+
+    lines = [ln.strip() for ln in full_text.split("\n") if ln.strip()]
+
+    # 1) Line-level: label and date on same line
+    for line in lines:
+        if not BIRTH_LABEL_RE.search(line):
+            continue
+        for m in DATE_IN_TEXT_RE.finditer(line):
+            parsed = parse_date_to_ddmmyyyy(m.group(1))
+            if parsed:
+                return normalize_date(parsed)
+
+    # 2) "Label" line then date on next line (common OCR split)
+    for i, line in enumerate(lines):
+        if not BIRTH_LABEL_RE.search(line):
+            continue
+        if DATE_IN_TEXT_RE.search(line):
+            continue
+        for j in range(i + 1, min(i + 3, len(lines))):
+            nxt = lines[j]
+            if DATE_INVALID_CONTEXT_RE.search(nxt) and not BIRTH_LABEL_RE.search(nxt):
+                continue
+            for m in DATE_IN_TEXT_RE.finditer(nxt):
+                parsed = parse_date_to_ddmmyyyy(m.group(1))
+                if parsed:
+                    return normalize_date(parsed)
+
+    # 3) OCR blocks: merge text from block containing birth label with following block(s)
+    ordered = sort_blocks_reading_order(ocr_blocks)
+    for i, (_, txt) in enumerate(ordered):
+        if not BIRTH_LABEL_RE.search(txt):
+            continue
+        chunk = txt
+        for j in range(i + 1, min(i + 3, len(ordered))):
+            chunk = chunk + " " + ordered[j][1]
+        if DATE_INVALID_CONTEXT_RE.search(chunk) and not BIRTH_LABEL_RE.search(chunk):
+            continue
+        for m in DATE_IN_TEXT_RE.finditer(chunk):
+            parsed = parse_date_to_ddmmyyyy(m.group(1))
+            if parsed:
+                return normalize_date(parsed)
+
+    # 4) Regex on full text (single clearest birth phrase)
+    m = re.search(
+        r"(?i)(?:n[ée]e?\s*\(?e?\)?\s*l[ée]|date\s*de\s*naissance)\s*[:\s]*(\d{1,2}[\.\-\/\s]\d{1,2}[\.\-\/\s]\d{2,4})",
+        full_text,
+    )
+    if m:
+        parsed = parse_date_to_ddmmyyyy(m.group(1))
+        if parsed:
+            return normalize_date(parsed)
+
+    return extract_dob_from_mrz(full_text)
+
+
+def extract_labeled_nom_prenom_from_lines(lines):
+    """
+    Moroccan CIN / forms: 'Nom' and 'Prénom' (value same line or next line).
+    Returns dict with keys 'Nom', 'Prénom' when found.
+    """
+    out = {}
+    if not lines:
+        return out
+
+    raw_lines = [ln.strip() for ln in lines]
+
+    label_nom = re.compile(r"(?i)^nom(?:\s*/\s*name)?\s*$")
+    label_prenom = re.compile(r"(?i)^pr[ée]nom(?:\s*/\s*(?:first|given)\s*name)?\s*$")
+    line_nom_val = re.compile(r"(?i)^nom(?:\s*/\s*name)?\s*[:\s\-–—]+\s*(.+)$")
+    line_prenom_val = re.compile(r"(?i)^pr[ée]nom(?:\s*/\s*(?:first|given)\s*name)?\s*[:\s\-–—]+\s*(.+)$")
+
+    for i, line in enumerate(raw_lines):
+        if label_nom.match(line) and i + 1 < len(raw_lines):
+            nxt = raw_lines[i + 1].strip()
+            if nxt and not label_prenom.match(nxt) and not label_nom.match(nxt):
+                out["Nom"] = nxt
+            continue
+
+        if label_prenom.match(line) and i + 1 < len(raw_lines):
+            nxt = raw_lines[i + 1].strip()
+            if nxt and not label_nom.match(nxt) and not label_prenom.match(nxt):
+                out["Prénom"] = nxt
+            continue
+
+        mn = line_nom_val.match(line)
+        if mn:
+            val = mn.group(1).strip()
+            if val and not re.match(r"(?i)^pr[ée]nom", val):
+                out["Nom"] = val
+
+        mp = line_prenom_val.match(line)
+        if mp:
+            val = mp.group(1).strip()
+            if val and not re.match(r"(?i)^nom\b", val):
+                out["Prénom"] = val
+
+    return out
+
+
+def extract_cin_number(full_text, ocr_blocks):
+    """Moroccan CIN: letter(s) + digits (e.g. WA123456, A1234567)."""
+    if not full_text and not ocr_blocks:
+        return None
+
+    patterns = [
+        r"(?i)n[°ºo]?\s*[.:]?\s*([A-Z]{1,2}\d{5,8})\b",
+        r"(?i)\b([A-Z]{1,2}\d{5,8})\b",
+        r"(?i)cin\s*[:\s]*([A-Z]{1,2}\d{5,8})\b",
+    ]
+    for pat in patterns:
+        m = re.search(pat, full_text or "")
+        if m:
+            return m.group(1).upper()
+
+    ordered = sort_blocks_reading_order(ocr_blocks or [])
+    for _, txt in ordered:
+        for pat in patterns:
+            m = re.search(pat, txt)
+            if m:
+                return m.group(1).upper()
+    return None
 
 
 def is_garbage_word(word):
@@ -127,46 +337,29 @@ def names_match(name1, name2):
     """Check if two names match regardless of word order and spaces. Includes fuzzy matching."""
     if not name1 or not name2:
         return False
-    
-    n1_nospace = ''.join(c.lower() for c in name1 if c.isalnum())
-    n2_nospace = ''.join(c.lower() for c in name2 if c.isalnum())
-    
+
+    n1_nospace = "".join(c.lower() for c in name1 if c.isalnum())
+    n2_nospace = "".join(c.lower() for c in name2 if c.isalnum())
+
     if n1_nospace == n2_nospace:
         return True
-    
-    # Sort characters to account for docTR line-reading order (e.g. MOHAMMED TABSART vs TABSART MOHAMMED)
-    n1_sorted = ''.join(sorted(n1_nospace))
-    n2_sorted = ''.join(sorted(n2_nospace))
-    
-    if n1_sorted == n2_sorted:
-        return True
-        
-    # Fuzzy matching fallback: allow up to 15% difference or max 2 character difference
+
+    s1 = set(w for w in normalize_value(name1).split() if len(w) > 1)
+    s2 = set(w for w in normalize_value(name2).split() if len(w) > 1)
+
+    if s1 and s2:
+        if s1 == s2:
+            return True
+        if s1.issubset(s2) or s2.issubset(s1):
+            return True
+        intersection = s1.intersection(s2)
+        if len(intersection) >= min(len(s1), len(s2)):
+            return True
+
     from difflib import SequenceMatcher
+
     ratio = SequenceMatcher(None, n1_nospace, n2_nospace).ratio()
     if ratio > 0.85:
-        return True
-        
-    # Also check sorted fuzzy for order issues + spelling errors
-    # Also check token set ratio
-    s1 = set(n1_nospace.split())
-    s2 = set(n2_nospace.split())
-    if s1 and s2:
-        # Check if all words from one are in the other
-        if s1.issubset(s2) or s2.issubset(s1):
-            # But the length difference shouldn't be too huge (max 2 words)
-            if abs(len(s1) - len(s2)) <= 2:
-                return True
-
-    ratio_sorted = SequenceMatcher(None, n1_sorted, n2_sorted).ratio()
-    # Stricter sorted ratio (was 0.90)
-    if ratio_sorted > 0.95:
-        return True
-        
-    # Final check: tokens
-    words1 = set(normalize_value(name1).split())
-    words2 = set(normalize_value(name2).split())
-    if words1 == words2 and words1:
         return True
 
     return False
@@ -188,7 +381,7 @@ def reformat_name(name_info):
     elif "Le candidat(e)" in name_info or "Candidature" in name_info:
         full_name = normalize_value(name_info.get("Le candidat(e)") or name_info.get("Candidature"))
         parts = full_name.split()
-        # Only swap if it's exactly 2 words (likely Prénom Nom)
+        # BAC often prints "Nom Prénom" as two tokens; normalize to "Prénom Nom"
         if len(parts) == 2:
             return f"{parts[1]} {parts[0]}"
         return full_name
@@ -211,11 +404,11 @@ def extract_names(text, keywords):
     
     headers_local = list(HEADERS)
 
-    # Expanded keyword patterns for common OCR errors
+    # Word boundaries so "Nom" does not match inside "Prénom".
     patterns = {
-        "Nom": r'(?i)Nom|Last\s*Name|Surname',
-        "Prénom": r'(?i)Pr[ée]no[mn]|First\s*Name',
-        "Le candidat(e)": r'(?i)Le\s*c[oa]nd[idat]*\s*[\(\/]?\s*[éeA]?\s*[\)\/]?|Candidature|Nom\s*et\s*pr[ée]nom'
+        "Prénom": r'(?i)\bPr[ée]nom\b(?:\s*/\s*First(?:\s*Name)?)?|\bFirst\s*Name\b',
+        "Nom": r'(?i)\bNom\b(?:\s*/\s*Name)?|\bLast\s*Name\b|\bSurname\b',
+        "Le candidat(e)": r'(?i)Le\s*c[oa]nd[idat]*\s*[\(\/]?\s*[éeA]?\s*[\)\/]?|Candidature|Nom\s*et\s*pr[ée]nom',
     }
 
     for i, line in enumerate(lines):
@@ -272,6 +465,98 @@ def extract_names(text, keywords):
 
     return name_info
 
+
+def extract_by_position(ocr_blocks, is_cin):
+    """Fallback extraction using spatial bounding box positions."""
+    name_info = {}
+    dob = None
+    cin = None
+    
+    if not ocr_blocks:
+        return name_info, dob, cin
+        
+    def get_y_center(box):
+        return sum([p[1] for p in box]) / 4
+        
+    def get_x_center(box):
+        return sum([p[0] for p in box]) / 4
+
+    def get_y_top(box):
+        return min([p[1] for p in box])
+        
+    def get_y_bottom(box):
+        return max([p[1] for p in box])
+
+    # DOB and CIN must not be taken from "first random date / number" on the card
+    # (validity, issue date, MRZ noise). Handled in process_image via label-aware helpers.
+
+    if is_cin:
+        y_header_bottom = 0
+        y_date_top = 999999
+        header_found = False
+        date_found = False
+        
+        for box, text in ocr_blocks:
+            t_upper = text.upper()
+            if not header_found and any(h in t_upper for h in ["CARTE NATIONALE", "IDENTITE", "ROYAUME"]):
+                y_header_bottom = max(y_header_bottom, get_y_bottom(box))
+                header_found = True
+                
+            if not date_found and re.search(
+                r'(?i)N[ÉE]?E?\s*\(?E?\)?\s*L[EE]|N[ÉE]\s*LE|DATE\s*DE\s*NAISS',
+                t_upper,
+            ):
+                if get_y_top(box) > y_header_bottom:
+                    y_date_top = min(y_date_top, get_y_top(box))
+                    date_found = True
+                    
+        if header_found and date_found and y_date_top > y_header_bottom:
+            candidate_blocks = []
+            for box, text in ocr_blocks:
+                y_c = get_y_center(box)
+                # 10 pixel margin
+                if (y_header_bottom - 10) < y_c < (y_date_top + 10):
+                    candidate_blocks.append((box, text))
+            
+            candidate_blocks.sort(key=lambda x: get_y_center(x[0]))
+            
+            valid_words = []
+            for box, text in candidate_blocks:
+                words = text.split()
+                for w in words:
+                    w_up = re.sub(r'[^a-zA-Z\s\u00C0-\u017F]', '', w.upper())
+                    if w_up and not is_garbage_word(w_up) and w_up not in HEADERS:
+                        valid_words.append(w_up)
+            
+            if valid_words:
+                name_info["Le candidat(e)"] = " ".join(valid_words)
+
+    else:
+        for i, (box, text) in enumerate(ocr_blocks):
+            if re.search(r'(?i)candidat\(?[ée]?\)?', text):
+                potential_value = re.sub(r'(?i).*candidat\(?[ée]?\)?\s*[:\s]*', '', text).strip()
+                if potential_value and len(re.sub(r'[^a-zA-Z]', '', potential_value)) > 2:
+                     name_info["Le candidat(e)"] = potential_value
+                else:
+                     c_y = get_y_center(box)
+                     c_x = get_x_center(box)
+                     
+                     potential_candidates = []
+                     for j in range(i+1, min(i+6, len(ocr_blocks))):
+                         n_box, n_text = ocr_blocks[j]
+                         n_y = get_y_center(n_box)
+                         n_x = get_x_center(n_box)
+                         
+                         if abs(n_y - c_y) < 30 and n_x > c_x:
+                             potential_candidates.append(n_text)
+                         elif 0 < (n_y - c_y) < 70:
+                             potential_candidates.append(n_text)
+                             
+                     if potential_candidates:
+                         name_info["Le candidat(e)"] = " ".join(potential_candidates)
+                break
+                
+    return name_info, dob, cin
 
 def preprocess_image(image_path):
     """Apply preprocessing to improve OCR on poor quality images."""
@@ -333,13 +618,17 @@ def extract_names_regex(text):
     """Extract names using regex patterns as fallback."""
     name_info = {}
     
-    # Pattern for "Nom: VALUE" or "Nom VALUE"
-    nom_match = re.search(r'(?i)(?:nom|name)\s*[:\s]+([A-Z\s]{2,})', text)
+    nom_match = re.search(
+        r'(?i)\bNom\b(?:\s*/\s*Name)?\s*[:\s]+([A-Za-zÀ-ÿ\s\-\'’]{2,})',
+        text,
+    )
     if nom_match:
-        name_info['Nom'] = nom_match.group(1).strip()
-        
-    # Pattern for "Prénom: VALUE"
-    prenom_match = re.search(r'(?i)(?:pr[ée]nom|first\s*name)\s*[:\s]+([A-Z\s]{2,})', text)
+        name_info["Nom"] = nom_match.group(1).strip()
+
+    prenom_match = re.search(
+        r'(?i)\bPr[ée]nom\b(?:\s*/\s*First(?:\s*Name)?)?\s*[:\s]+([A-Za-zÀ-ÿ\s\-\'’]{2,})',
+        text,
+    )
     if prenom_match:
         name_info['Prénom'] = prenom_match.group(1).strip()
         
@@ -354,13 +643,19 @@ def process_image(image_path):
         img_to_ocr = processed_path if processed_path else image_path
         
         extracted_text = ""
+        ocr_blocks = []
         
         # 2. Try PaddleOCR first (better for complex layouts)
         if reader_paddle:
             try:
                 result = reader_paddle.ocr(img_to_ocr)
                 if result and result[0]:
-                    lines = [line[1][0] for line in result[0]]
+                    lines = []
+                    for line in result[0]:
+                        box = line[0]
+                        text = line[1][0]
+                        ocr_blocks.append((box, text))
+                        lines.append(text)
                     extracted_text = "\n".join(lines)
             except Exception as e:
                 print(f"PaddleOCR inference failed: {e}")
@@ -368,8 +663,14 @@ def process_image(image_path):
         # 3. Fallback to EasyOCR if PaddleOCR fails or is empty
         if not extracted_text.strip() and reader_easyocr:
             try:
-                result = reader_easyocr.readtext(img_to_ocr, detail=0)
-                extracted_text = "\n".join(result)
+                result = reader_easyocr.readtext(img_to_ocr, detail=1)
+                lines = []
+                for res in result:
+                    box = res[0]
+                    text = res[1]
+                    ocr_blocks.append((box, text))
+                    lines.append(text)
+                extracted_text = "\n".join(lines)
             except Exception as e:
                 print(f"EasyOCR inference failed: {e}")
         
@@ -377,35 +678,62 @@ def process_image(image_path):
         print(f"--- OCR Result for {os.path.basename(image_path)} ---")
         print(extracted_text)
         print("---------------------------------------------")
-            
-        # Check if it's a CIN (Moroccan National ID)
-        is_cin = any(ind in extracted_text.upper() for ind in ["ROYAUME DU MAROC", "CARTE NATIONALE", "IDENTITE"])
 
-        # Attempt A: Extract names using spaCy
-        name_info = extract_names_spacy(extracted_text)
+        ocr_blocks = sort_blocks_reading_order(ocr_blocks)
+        extracted_text = "\n".join(t for _, t in ocr_blocks)
+        text_upper = extracted_text.upper()
 
-        # Attempt B: Extract names using keywords
-        if not name_info:
-            name_info = extract_names(extracted_text, keywords)
-        
-        if is_cin and not name_info:
-            # Specific CIN logic: Names are usually the first few capitalized lines 
-            # after the headers and before birth info
-            lines = extracted_text.split('\n')
+        is_cin = any(
+            ind in text_upper
+            for ind in ["ROYAUME DU MAROC", "CARTE NATIONALE", "IDENTITE", "CARTE D'IDENTITE"]
+        )
+
+        lines_list = [ln.strip() for ln in extracted_text.split("\n") if ln.strip()]
+
+        name_info = {}
+
+        labeled = extract_labeled_nom_prenom_from_lines(lines_list)
+        for k, v in labeled.items():
+            if v and len(v.strip()) > 1:
+                name_info[k] = v.strip()
+
+        kw_names = extract_names(extracted_text, keywords)
+        for k, v in kw_names.items():
+            if not v:
+                continue
+            if k in ("Nom", "Prénom") and name_info.get(k):
+                continue
+            if k not in name_info:
+                name_info[k] = v
+
+        has_both = name_info.get("Nom") and name_info.get("Prénom")
+
+        pos_name_info, _, _ = extract_by_position(ocr_blocks, is_cin)
+        if not has_both and pos_name_info.get("Le candidat(e)"):
+            clean_name = normalize_value(pos_name_info["Le candidat(e)"])
+            if len(clean_name) > 3:
+                name_info["Le candidat(e)"] = pos_name_info["Le candidat(e)"].strip()
+
+        if not name_info.get("Le candidat(e)") and not has_both:
+            spacy_names = extract_names_spacy(extracted_text)
+            if spacy_names.get("Le candidat(e)"):
+                name_info["Le candidat(e)"] = spacy_names["Le candidat(e)"]
+
+        if is_cin and not has_both and not name_info.get("Le candidat(e)"):
             cin_name_parts = []
             found_header = False
-            
-            for line in lines:
+            for line in lines_list:
                 l_upper = line.upper()
-                if any(h in l_upper for h in ["CARTE NATIONALE", "IDENTITE"]):
+                if any(h in l_upper for h in ["CARTE NATIONALE", "IDENTITE", "ROYAUME"]):
                     found_header = True
                     continue
                 if found_header:
-                    # Termination: birth info or birth place (regex for robust matching)
-                    if re.search(r'(?i)N[ée]le|N[ée]\s*le|VALABLE|MAJMAA|TOLBA|KHEMISSET', l_upper):
+                    if re.search(
+                        r"(?i)N[ÉE]?E?\s*\(?E?\)?\s*L[EE]|"
+                        r"DATE\s*DE\s*NAISS|VALABLE|MAJMAA|TOLBA|KHEMISSET",
+                        l_upper,
+                    ):
                         break
-                    
-                    # Clean the line and see if it's a name part
                     words = line.split()
                     valid_words = []
                     for w in words:
@@ -414,60 +742,67 @@ def process_image(image_path):
                             valid_words.append(w)
                         elif not is_garbage_word(w) and w_up not in HEADERS:
                             valid_words.append(w)
-                    
                     if valid_words:
                         cin_name_parts.append(" ".join(valid_words))
-            
             if cin_name_parts:
                 name_info["Le candidat(e)"] = " ".join(cin_name_parts)
 
-        if not name_info:
-            # Attempt C: Regex patterns
-            name_info = extract_names_regex(extracted_text)
+        if not has_both and not name_info.get("Le candidat(e)"):
+            rx_names = extract_names_regex(extracted_text)
+            for k, v in rx_names.items():
+                if v and not name_info.get(k):
+                    name_info[k] = v
 
-        if not name_info:
-            # Attempt D: Look for patterns in the text lines
-            lines = extracted_text.split('\n')
-            for i, line in enumerate(lines):
-                if ':' in line:
-                    parts = line.split(':')
+        if not has_both and not name_info.get("Le candidat(e)"):
+            for i, line in enumerate(lines_list):
+                if ":" in line:
+                    parts = line.split(":", 1)
                     key = parts[0].strip().lower()
                     value = parts[1].strip()
-                    if 'nom' in key:
-                        name_info['Nom'] = value
-                    elif 'prénom' in key or 'prenom' in key:
-                        name_info['Prénom'] = value
-
-                if 'candidat' in line.lower():
-                    # Check if the name is on the same line after a separator
-                    potential_value = re.sub(r'(?i).*candidat\(?[ée]?\)?\s*[:\s]+', '', line).strip()
+                    if re.match(r"(?i)nom\b", key) and "prénom" not in key and "prenom" not in key:
+                        name_info["Nom"] = value
+                    elif re.match(r"(?i)pr[ée]nom\b", key):
+                        name_info["Prénom"] = value
+                if "candidat" in line.lower():
+                    potential_value = re.sub(
+                        r"(?i).*candidat\(?[ée]?\)?\s*[:\s]+", "", line
+                    ).strip()
                     if potential_value and len(potential_value) > 3:
-                        name_info['Le candidat(e)'] = potential_value
-                    elif i + 1 < len(lines):
-                        # Otherwise check the next line
-                        name_info['Le candidat(e)'] = lines[i + 1].strip()
+                        name_info["Le candidat(e)"] = potential_value
+                    elif i + 1 < len(lines_list):
+                        name_info["Le candidat(e)"] = lines_list[i + 1].strip()
 
-        final_data = name_info if name_info else {}
-            
-        # Attempt E: Extract capitalized words (last resort)
-        if not final_data:
+        final_data = dict(name_info) if name_info else {}
+
+        if not final_data or (
+            not final_data.get("Nom")
+            and not final_data.get("Prénom")
+            and not final_data.get("Le candidat(e)")
+        ):
             capital_words = extract_capital_words(extracted_text)
             if 2 <= len(capital_words) <= 5:
                 final_data = {
                     "Prénom": capital_words[0],
-                    "Nom": " ".join(capital_words[1:])
+                    "Nom": " ".join(capital_words[1:]),
                 }
-                
-        # Extract Date of Birth and CIN (common for all IDs)
-        # Handle "Né le", "Née le", "Né(e) le", "Date de naissance"
-        dob_match = re.search(r'(?i)(?:n[ée]\(?e?\)?\s*le|date\s*de\s*naissance)[:\s]+(\d{1,2}[\.\-\/:]\d{1,2}[\.\-\/:]\d{4})', extracted_text)
-        if dob_match:
-            final_data['dob'] = normalize_date(dob_match.group(1))
-            
-        # CIN pattern: 1-2 letters followed by 5-7 digits
-        cin_match = re.search(r'(?i)N[°\s]*([A-Z]{0,2}\d{5,8})', extracted_text)
-        if cin_match:
-            final_data['cin'] = cin_match.group(1).upper()
+
+        dob = extract_birth_date_smart(extracted_text, ocr_blocks)
+        if dob:
+            final_data["dob"] = dob
+        else:
+            dob_match = re.search(
+                r"(?i)(?:n[ée]\(?e?\)?\s*le|date\s*de\s*naissance)\s*[:\s]*"
+                r"(\d{1,2}[\.\-\/:\s]\d{1,2}[\.\-\/:\s]\d{2,4})",
+                extracted_text,
+            )
+            if dob_match:
+                parsed = parse_date_to_ddmmyyyy(dob_match.group(1))
+                if parsed:
+                    final_data["dob"] = normalize_date(parsed)
+
+        cin_num = extract_cin_number(extracted_text, ocr_blocks)
+        if cin_num:
+            final_data["cin"] = cin_num
 
         return final_data if final_data else None
 
