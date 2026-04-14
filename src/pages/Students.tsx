@@ -402,7 +402,7 @@ const Students = () => {
                             <p className="text-[10px] font-bold truncate mb-1" title={detail.file}>{detail.file}</p>
                             <div className="flex items-center justify-between gap-2">
                               <span className="text-xs text-muted-foreground truncate">
-                                {detail.extracted_name || "No name found"}
+                                {detail.extracted_name || detail.extracted_cie || "No data extracted"}
                               </span>
                               {detail.extracted_dob && (
                                 <Badge variant="outline" className="text-[10px] font-normal py-0">

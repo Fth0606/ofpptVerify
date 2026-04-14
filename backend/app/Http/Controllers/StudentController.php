@@ -109,6 +109,7 @@ class StudentController extends Controller
                 'bacYear'    => $getValue(['bacYear', 'bac_year', 'année_du_bac']),
                 'bacScore'   => $getValue(['bacScore', 'bac_score', 'moyenne_du_bac']),
                 'bacMention' => $getValue(['bacMention', 'bac_mention', 'mention_du_bac']),
+                'cne'        => $getValue(['cne', 'massar', 'student_id']),
             ];
 
             if ($student) {
@@ -408,11 +409,24 @@ class StudentController extends Controller
             return response()->json(['error' => 'No valid document files found to verify'], 422);
         }
 
+        // Build a JSON mapping of expected student parameters
+        $expectedData = [];
+        foreach ($studentsWithDocs as $student) {
+            $expectedData[$student->cin] = [
+                'fullName'    => $student->fullName,
+                'dateOfBirth' => $student->dateOfBirth,
+                'cin'         => $student->cin,
+                'cne'         => $student->cne ?? $student->student_id
+            ];
+        }
+
         try {
             $ocrUrl   = env('OCR_SERVICE_URL', 'http://localhost:5001');
             $response = Http::timeout(3600)
                 ->attach('file', file_get_contents($zipPath), 'verify.zip')
-                ->post($ocrUrl . '/validate');
+                ->post($ocrUrl . '/validate', [
+                    'expected_data' => json_encode($expectedData)
+                ]);
 
             unlink($zipPath);
 
@@ -440,32 +454,13 @@ class StudentController extends Controller
                         }
                     }
 
-                    if ($verifiedName && !$this->namesMatch($verifiedName, $student->fullName)) {
-                        $isCorrect    = false;
-                        $mismatches[] = [
-                            'document'   => 'verification',
-                            'field'      => 'Full Name',
-                            'excelValue' => $student->fullName,
-                            'ocrValue'   => $verifiedName,
-                        ];
-                    }
-
-                    if ($verifiedDob && $student->dateOfBirth && $student->dateOfBirth !== $verifiedDob) {
-                        $isCorrect    = false;
-                        $mismatches[] = [
-                            'document'   => 'verification',
-                            'field'      => 'Date of Birth',
-                            'excelValue' => $student->dateOfBirth,
-                            'ocrValue'   => $verifiedDob,
-                        ];
-                    }
-
+                    // We now strictly trust the OCR backend for correctness because it does supervised validation!
                     if (!$isCorrect && empty($mismatches)) {
                         $mismatches[] = [
-                            'document'   => 'OCR Service',
-                            'field'      => 'Validation Status',
-                            'excelValue' => 'Verified',
-                            'ocrValue'   => 'Mismatch detected',
+                            'document'   => 'Verification Failure',
+                            'field'      => 'General OCR',
+                            'excelValue' => 'Expected matches',
+                            'ocrValue'   => 'Mismatch detected in document data',
                         ];
                     }
 
@@ -479,7 +474,7 @@ class StudentController extends Controller
                                 Document::where('id', $docId)->update([
                                     'ocr_extracted_name' => $detail['extracted_name'],
                                     'ocr_extracted_dob'  => $detail['extracted_dob'],
-                                    'ocr_extracted_cin'  => $detail['extracted_cin'] ?? null,
+                                    'ocr_extracted_cin'  => $detail['extracted_cin'] ?? $detail['extracted_cne'] ?? null,
                                     'ocr_status'         => 'processed',
                                 ]);
                             }

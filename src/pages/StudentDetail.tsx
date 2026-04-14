@@ -191,6 +191,7 @@ const StudentDetail = () => {
           <CardHeader><CardTitle className="text-base">Academic Information</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             {[
+              ["CNE", student.student_id],
               ["Filière", student.filiere],
               ["Classe", student.classe],
               ["Group", student.group],
