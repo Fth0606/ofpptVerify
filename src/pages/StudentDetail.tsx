@@ -23,10 +23,10 @@ import {
 
 const statusBadge = (status: string) => {
   switch (status) {
-    case "verified": return <Badge className="bg-green-100 text-green-700 border-0">✅ Verified</Badge>;
-    case "mismatch": return <Badge className="bg-yellow-100 text-yellow-700 border-0">⚠️ Mismatch</Badge>;
-    case "pending": return <Badge variant="secondary">⏳ Pending</Badge>;
-    case "missing": return <Badge variant="destructive">❌ Missing</Badge>;
+    case "verified": return <Badge className="bg-green-100 text-green-700 border-0">✅ Vérifié</Badge>;
+    case "mismatch": return <Badge className="bg-yellow-100 text-yellow-700 border-0">⚠️ Non Concordant</Badge>;
+    case "pending": return <Badge variant="secondary">⏳ En Attente</Badge>;
+    case "missing": return <Badge variant="destructive">❌ Manquant</Badge>;
     default: return <Badge variant="secondary">{status}</Badge>;
   }
 };
@@ -40,9 +40,9 @@ const ocrStatusIcon = (status: string) => {
 };
 
 const DOC_TYPES: { key: StudentDocument["type"]; label: string; icon: any }[] = [
-  { key: "birth_certificate", label: "Birth Certificate", icon: FileText },
-  { key: "baccalaureate", label: "Baccalaureate", icon: GraduationCap },
-  { key: "cin", label: "CIN (ID Card)", icon: CreditCard },
+  { key: "birth_certificate", label: "Extrait de Naissance", icon: FileText },
+  { key: "baccalaureate", label: "Baccalauréat", icon: GraduationCap },
+  { key: "cin", label: "CIN (Carte d'identité)", icon: CreditCard },
 ];
 
 const formatBytes = (bytes: number) => {
@@ -71,7 +71,7 @@ const StudentDetail = () => {
       setStudent(studentData);
       setDocuments(docsData);
     } catch (error) {
-      toast.error("Failed to load student details");
+      toast.error("Échec du chargement des détails de l'étudiant");
       console.error(error);
     } finally {
       setLoading(false);
@@ -85,15 +85,15 @@ const StudentDetail = () => {
     if (!file || !id || !uploadingType) return;
 
     try {
-      toast.loading(`Uploading ${uploadingType}...`, { id: "upload" });
+      toast.loading(`Téléversement en cours de ${uploadingType}...`, { id: "upload" });
       await apiService.uploadDocument(id, uploadingType, file);
-      toast.success("Document uploaded successfully", { id: "upload" });
+      toast.success("Document téléversé avec succès", { id: "upload" });
       // Re-fetch documents to reflect the new upload
       const docsData = await apiService.fetchStudentDocuments(id);
       setDocuments(docsData);
       if (student) setStudent({ ...student, documentsUploaded: docsData.length });
     } catch (error) {
-      toast.error("Failed to upload document", { id: "upload" });
+      toast.error("Échec du téléversement du document", { id: "upload" });
       console.error(error);
     } finally {
       setUploadingType(null);
@@ -110,12 +110,12 @@ const StudentDetail = () => {
     if (!docToDelete || !id) return;
     try {
       await apiService.deleteDocument(docToDelete.id);
-      toast.success("Document deleted");
+      toast.success("Document supprimé");
       const docsData = await apiService.fetchStudentDocuments(id);
       setDocuments(docsData);
       if (student) setStudent({ ...student, documentsUploaded: docsData.length });
     } catch {
-      toast.error("Failed to delete document");
+      toast.error("Échec de la suppression du document");
     } finally {
       setDocToDelete(null);
     }
@@ -125,7 +125,7 @@ const StudentDetail = () => {
     return (
       <div className="flex flex-col items-center justify-center py-20">
         <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-        <p className="text-muted-foreground">Loading student details...</p>
+        <p className="text-muted-foreground">Chargement des détails de l'étudiant...</p>
       </div>
     );
   }
@@ -133,8 +133,8 @@ const StudentDetail = () => {
   if (!student) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
-        <p className="text-muted-foreground">Student not found</p>
-        <Button variant="ghost" onClick={() => navigate("/students")} className="mt-4">Back to Students</Button>
+        <p className="text-muted-foreground">Étudiant introuvable</p>
+        <Button variant="ghost" onClick={() => navigate("/students")} className="mt-4">Retour aux Étudiants</Button>
       </div>
     );
   }
@@ -156,11 +156,9 @@ const StudentDetail = () => {
         </Button>
         <div className="flex-1">
           <h1 className="text-2xl font-bold">
-            {student.lastName && student.firstName
-              ? `${student.lastName} ${student.firstName}`
-              : student.fullName}
+            {student.Nom} {student.Prenom}
           </h1>
-          <p className="text-muted-foreground">{student.filiere} · {student.classe} · {student.group}</p>
+          <p className="text-muted-foreground">{student.LibelleLong} · {student.Site}</p>
         </div>
         {statusBadge(student.status)}
       </div>
@@ -168,16 +166,17 @@ const StudentDetail = () => {
       {/* Info Grid */}
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
-          <CardHeader><CardTitle className="text-base">Personal Information</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">Informations Personnelles</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             {[
-              ["Last Name (Nom)", student.lastName || "-"],
-              ["First Name (Prénom)", student.firstName || "-"],
-              ["Full Name", student.fullName],
-              ["Date of Birth", student.dateOfBirth],
-              ["Birthplace", student.birthplace],
+              ["Nom (Français)", student.Nom || "-"],
+              ["Prénom (Français)", student.Prenom || "-"],
+              ["Nom (Arabe)", student.Nom_Arabe || "-"],
+              ["Prénom (Arabe)", student.Prenom_arabe || "-"],
+              ["Date de Naissance", student.DateNaissance],
               ["CIN", student.cin],
-              ["Parent Name", student.parentName],
+              ["Nationalité", student.Nationalite],
+              ["Numéro de Téléphone", student.NTelephone],
             ].map(([label, value]) => (
               <div key={label} className="flex justify-between text-sm">
                 <span className="text-muted-foreground">{label}</span>
@@ -188,20 +187,19 @@ const StudentDetail = () => {
         </Card>
 
         <Card>
-          <CardHeader><CardTitle className="text-base">Academic Information</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">Informations Académiques</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             {[
-              ["CNE", student.student_id],
-              ["Filière", student.filiere],
-              ["Classe", student.classe],
-              ["Group", student.group],
-              ["Bac Year", student.bacYear],
-              ["Bac Score", student.bacScore],
-              ["Bac Mention", student.bacMention],
+              ["Matricule (CNE)", student.MatriculeEtudiant],
+              ["Site", student.Site],
+              ["Libellé Long (Filière)", student.LibelleLong],
+              ["Code Diplôme", student.CodeDiplome],
+              ["Année d'étude", student.anneeEtude],
+              ["Niveau Scolaire", student.NiveauScolaire],
             ].map(([label, value]) => (
               <div key={label} className="flex justify-between text-sm">
                 <span className="text-muted-foreground">{label}</span>
-                <span className="font-medium">{value || "-"}</span>
+                <span className="font-medium max-w-[60%] text-right">{value || "-"}</span>
               </div>
             ))}
           </CardContent>
@@ -211,13 +209,13 @@ const StudentDetail = () => {
       {/* Mismatch Details */}
       {student.mismatch_details && student.mismatch_details.length > 0 && (
         <Card className="border-red-200 bg-red-50/30">
-          <CardHeader><CardTitle className="text-base text-red-700">⚠️ Mismatch Details</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base text-red-700">⚠️ Détails des Non Concordances</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             {student.mismatch_details.map((m: any, i: number) => (
               <div key={i} className="text-sm p-2 rounded bg-red-100/50 border border-red-200">
                 <span className="font-semibold">{m.field}</span> ({m.document}):&nbsp;
-                Expected "<span className="text-blue-700">{m.excelValue}</span>",&nbsp;
-                Got "<span className="text-red-700">{m.ocrValue}</span>"
+                Attendu "<span className="text-blue-700">{m.excelValue}</span>",&nbsp;
+                Obtenu "<span className="text-red-700">{m.ocrValue}</span>"
               </div>
             ))}
           </CardContent>
@@ -228,7 +226,7 @@ const StudentDetail = () => {
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center justify-between">
-            <span>Documents <span className="text-muted-foreground font-normal text-sm ml-1">({documents.length}/3 uploaded)</span></span>
+            <span>Documents <span className="text-muted-foreground font-normal text-sm ml-1">({documents.length}/3 téléversés)</span></span>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -270,13 +268,13 @@ const StudentDetail = () => {
                         </div>
                         {doc.ocr_extracted_name && (
                           <div className="p-1.5 rounded bg-white border text-[11px]">
-                            <span className="text-gray-400">Name: </span>
+                            <span className="text-gray-400">Nom : </span>
                             <span className="font-medium text-gray-700">{doc.ocr_extracted_name}</span>
                           </div>
                         )}
                         {doc.ocr_extracted_dob && (
                           <div className="p-1.5 rounded bg-white border text-[11px]">
-                            <span className="text-gray-400">DOB: </span>
+                            <span className="text-gray-400">Date Nais. : </span>
                             <span className="font-medium text-gray-700">{doc.ocr_extracted_dob}</span>
                           </div>
                         )}
@@ -292,7 +290,7 @@ const StudentDetail = () => {
                         >
                           <Button variant="outline" size="sm" className="w-full h-8 text-xs border-green-300 text-green-700 hover:bg-green-50">
                             <ExternalLink className="mr-1 h-3 w-3" />
-                            View
+                            Voir
                           </Button>
                         </a>
                         <Button
@@ -312,12 +310,12 @@ const StudentDetail = () => {
                         onClick={() => triggerUpload(docType.key)}
                         disabled={uploadingType !== null}
                       >
-                        Replace
+                        Remplacer
                       </Button>
                     </>
                   ) : (
                     <>
-                      <p className="text-xs text-muted-foreground">No document uploaded yet</p>
+                      <p className="text-xs text-muted-foreground">Aucun document téléversé</p>
                       <Button
                         variant="outline"
                         size="sm"
@@ -325,7 +323,7 @@ const StudentDetail = () => {
                         disabled={uploadingType !== null}
                       >
                         <Upload className="mr-2 h-3 w-3" />
-                        Upload
+                        Téléverser
                       </Button>
                     </>
                   )}
@@ -340,15 +338,15 @@ const StudentDetail = () => {
       <AlertDialog open={!!docToDelete} onOpenChange={() => setDocToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Document?</AlertDialogTitle>
+            <AlertDialogTitle>Supprimer le Document ?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete <strong>{docToDelete?.original_filename}</strong> from the database.
+              Cela supprimera définitivement <strong>{docToDelete?.original_filename}</strong> de la base de données.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteDoc} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Delete
+              Supprimer
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

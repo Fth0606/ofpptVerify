@@ -35,18 +35,20 @@ class StudentController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'student_id' => 'required|unique:students',
-            'fullName'   => 'required',
-            'dateOfBirth'=> 'nullable',
-            'birthplace' => 'nullable',
-            'cin'        => 'nullable',
-            'filiere'    => 'nullable',
-            'classe'     => 'nullable',
-            'group'      => 'nullable',
-            'parentName' => 'nullable',
-            'bacYear'    => 'nullable',
-            'bacScore'   => 'nullable',
-            'bacMention' => 'nullable',
+            'MatriculeEtudiant' => 'required|unique:students',
+            'Nom'               => 'required',
+            'Prenom'            => 'required',
+            'LibelleLong'       => 'nullable',
+            'CodeDiplome'       => 'nullable',
+            'DateNaissance'     => 'nullable',
+            'Site'              => 'nullable',
+            'cin'               => 'nullable',
+            'NTelephone'        => 'nullable',
+            'Nationalite'       => 'nullable',
+            'anneeEtude'        => 'nullable',
+            'Nom_Arabe'         => 'nullable',
+            'Prenom_arabe'      => 'nullable',
+            'NiveauScolaire'    => 'nullable',
         ]);
         return Student::create($data);
     }
@@ -67,53 +69,30 @@ class StudentController extends Controller
                 return null;
             };
 
-            $studentId = $getValue(['id', 'student_id', 'cne', 'massar']);
-            $cin       = $getValue(['cin', 'cin_number']);
-            $firstName = $getValue(['firstName', 'prenom', 'prénom', 'prã©nom', 'first name', 'firstname']);
-            $lastName  = $getValue(['lastName', 'nom', 'last name', 'lastname', 'surname']);
-            $fullName  = $getValue(['fullName', 'full name', 'fullname', 'name']);
-
-            if ((empty($firstName) || empty($lastName)) && !empty($fullName)) {
-                if (empty($firstName) && empty($lastName)) {
-                    $parts     = explode(' ', $fullName, 2);
-                    $lastName  = $parts[0] ?? '';
-                    $firstName = $parts[1] ?? '';
-                } elseif (empty($firstName)) {
-                    $firstName = trim(str_replace($lastName, '', $fullName));
-                } elseif (empty($lastName)) {
-                    $lastName = trim(str_replace($firstName, '', $fullName));
-                }
-            } elseif (!empty($firstName) && !empty($lastName) && empty($fullName)) {
-                $fullName = trim($lastName . ' ' . $firstName);
-            }
-
-            if (empty($studentId)) $studentId = $cin ?? uniqid();
-            if (empty($fullName))  $fullName  = 'Student ' . ($cin ?? $studentId);
-
-            $student = Student::where('student_id', $studentId)
-                ->when(!empty($cin), fn($q) => $q->orWhere('cin', $cin))
-                ->first();
-
             $updateData = [
-                'student_id' => $studentId,
-                'firstName'  => $firstName,
-                'lastName'   => $lastName,
-                'fullName'   => $fullName,
-                'dateOfBirth'=> $getValue(['dateOfBirth', 'dob', 'date_of_birth']),
-                'birthplace' => $getValue(['birthplace', 'lieu_de_naissance']),
-                'cin'        => $cin,
-                'filiere'    => $getValue(['filiere', 'filière', 'branch']),
-                'classe'     => $getValue(['classe', 'class']),
-                'group'      => $getValue(['group', 'groupe']),
-                'parentName' => $getValue(['parentName', 'parent_name', 'nom_du_parent']),
-                'bacYear'    => $getValue(['bacYear', 'bac_year', 'année_du_bac']),
-                'bacScore'   => $getValue(['bacScore', 'bac_score', 'moyenne_du_bac']),
-                'bacMention' => $getValue(['bacMention', 'bac_mention', 'mention_du_bac']),
-                'cne'        => $getValue(['cne', 'massar', 'student_id']),
+                'MatriculeEtudiant' => $getValue(['MatriculeEtudiant', 'matriculeetudiant', 'cne', 'massar', 'student_id']),
+                'Nom'               => $getValue(['Nom', 'nom', 'lastname', 'last name']),
+                'Prenom'            => $getValue(['Prenom', 'prenom', 'firstname', 'first name']),
+                'LibelleLong'       => $getValue(['LibelleLong', 'libellelong', 'filiere']),
+                'CodeDiplome'       => $getValue(['CodeDiplome', 'codediplome', 'group', 'groupe']),
+                'DateNaissance'     => $getValue(['DateNaissance', 'datenaissance', 'dob']),
+                'Site'              => $getValue(['Site', 'site']),
+                'cin'               => $getValue(['CIN', 'cin']),
+                'NTelephone'        => $getValue(['NTelephone', 'ntelephone', 'telephone']),
+                'Nationalite'       => $getValue(['Nationalite', 'nationalite']),
+                'anneeEtude'        => $getValue(['anneeEtude', 'anneeetude']),
+                'Nom_Arabe'         => $getValue(['Nom_Arabe', 'nom_arabe']),
+                'Prenom_arabe'      => $getValue(['Prenom_arabe', 'prenom_arabe']),
+                'NiveauScolaire'    => $getValue(['NiveauScolaire', 'niveauscolaire']),
             ];
 
+            if (empty($updateData['MatriculeEtudiant'])) $updateData['MatriculeEtudiant'] = $updateData['cin'] ?? uniqid();
+
+            $student = Student::where('MatriculeEtudiant', $updateData['MatriculeEtudiant'])
+                ->when(!empty($updateData['cin']), fn($q) => $q->orWhere('cin', $updateData['cin']))
+                ->first();
+
             if ($student) {
-                if ($student->student_id === $updateData['student_id']) unset($updateData['student_id']);
                 $student->update($updateData);
             } else {
                 $student = Student::create($updateData);
@@ -358,7 +337,7 @@ class StudentController extends Controller
     {
         set_time_limit(0);
         $groupName = $request->input('group');
-        $students  = Student::where('group', $groupName)->with('documents')->get();
+        $students  = Student::where('CodeDiplome', $groupName)->with('documents')->get();
 
         if ($students->isEmpty()) {
             return response()->json(['error' => 'No students found in this group'], 404);
@@ -413,10 +392,10 @@ class StudentController extends Controller
         $expectedData = [];
         foreach ($studentsWithDocs as $student) {
             $expectedData[$student->cin] = [
-                'fullName'    => $student->fullName,
-                'dateOfBirth' => $student->dateOfBirth,
+                'fullName'    => trim($student->Nom . ' ' . $student->Prenom),
+                'dateOfBirth' => $student->DateNaissance,
                 'cin'         => $student->cin,
-                'cne'         => $student->cne ?? $student->student_id
+                'cne'         => $student->MatriculeEtudiant
             ];
         }
 

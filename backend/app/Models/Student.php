@@ -29,7 +29,7 @@ class Student extends Model
     public static function findByAnyId($id)
     {
         return static::where('id', $id)
-            ->orWhere('student_id', $id)
+            ->orWhere('MatriculeEtudiant', $id)
             ->first();
     }
 }

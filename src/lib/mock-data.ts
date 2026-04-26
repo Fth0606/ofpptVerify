@@ -91,19 +91,19 @@ export const dashboardStats = {
 };
 
 /** Group students by filière then classe */
-export function groupByFiliereClasse(students: Student[]): Record<string, Record<string, Student[]>> {
-  const grouped: Record<string, Record<string, Student[]>> = {};
+export function groupByFiliereClasse(students: any[]): Record<string, Record<string, any[]>> {
+  const grouped: Record<string, Record<string, any[]>> = {};
   const sorted = [...students].sort((a, b) => {
-    const filiereA = a.filiere || "Unknown Filiere";
-    const filiereB = b.filiere || "Unknown Filiere";
-    const classeA = a.classe || "Unknown Classe";
-    const classeB = b.classe || "Unknown Classe";
+    const filiereA = a.LibelleLong || a.filiere || "Unknown Filiere";
+    const filiereB = b.LibelleLong || b.filiere || "Unknown Filiere";
+    const classeA = a.CodeDiplome || a.classe || "Unknown Classe";
+    const classeB = b.CodeDiplome || b.classe || "Unknown Classe";
     return filiereA.localeCompare(filiereB) || classeA.localeCompare(classeB);
   });
   
   for (const s of sorted) {
-    const f = s.filiere || "Unknown Filiere";
-    const c = s.classe || "Unknown Classe";
+    const f = s.LibelleLong || s.filiere || "Unknown Filiere";
+    const c = s.CodeDiplome || s.classe || "Unknown Classe";
     if (!grouped[f]) grouped[f] = {};
     if (!grouped[f][c]) grouped[f][c] = [];
     grouped[f][c].push(s);

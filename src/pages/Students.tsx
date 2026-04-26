@@ -45,7 +45,7 @@ const Students = () => {
       const data = await apiService.fetchStudents();
       setStudents(data);
     } catch (error) {
-      toast.error("Failed to load students from database");
+      toast.error("Échec du chargement des étudiants depuis la base de données");
       console.error(error);
     } finally {
       setLoading(false);
@@ -61,10 +61,10 @@ const Students = () => {
 
     try {
       await apiService.deleteStudent(studentToDelete.id);
-      toast.success(`Student ${studentToDelete.fullName} deleted successfully`);
+      toast.success(`L'étudiant ${studentToDelete.Nom} ${studentToDelete.Prenom} a été supprimé avec succès`);
       setStudents(students.filter(s => s.id !== studentToDelete.id));
     } catch (error) {
-      toast.error("Failed to delete student");
+      toast.error("Échec de la suppression de l'étudiant");
       console.error(error);
     } finally {
       setStudentToDelete(null);
@@ -73,43 +73,44 @@ const Students = () => {
   };
 
   const filteredStudents = students.filter(s => {
-    const matchesSearch = s.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.cin.toLowerCase().includes(searchTerm.toLowerCase());
+    const fullName = `${s.Nom || ''} ${s.Prenom || ''}`.toLowerCase();
+    const matchesSearch = fullName.includes(searchTerm.toLowerCase()) ||
+      (s.cin && s.cin.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesStatus = statusFilter === "all" || s.status === statusFilter;
-    const matchesGroup = groupFilter === "all" || s.group === groupFilter;
+    const matchesGroup = groupFilter === "all" || s.CodeDiplome === groupFilter;
     return matchesSearch && matchesStatus && matchesGroup;
   });
 
-  const uniqueGroups = Array.from(new Set(students.map(s => s.group).filter(Boolean))).sort();
+  const uniqueGroups = Array.from(new Set(students.map(s => s.CodeDiplome).filter(Boolean))).sort();
 
   const handleVerifyGroup = async () => {
     if (groupFilter === "all") {
-      toast.error("Please select a group first");
+      toast.error("Veuillez d'abord sélectionner un groupe");
       return;
     }
 
     // Check if any student in the filtered group has documents
-    const groupStudents = students.filter(s => s.group === groupFilter);
+    const groupStudents = students.filter(s => s.CodeDiplome === groupFilter);
     const withDocs = groupStudents.filter(s => (s.documentsUploaded ?? 0) > 0 || (s as any).documents_count > 0);
     if (withDocs.length === 0) {
-      toast.warning(`No documents uploaded for group ${groupFilter} yet. Please upload documents first via "Upload Documents".`);
+      toast.warning(`Aucun document téléversé pour le groupe ${groupFilter}. Veuillez d'abord téléverser des documents.`);
       return;
     }
 
     setIsVerifying(true);
-    const toastId = toast.loading(`Verifying group ${groupFilter}... This may take a minute.`);
+    const toastId = toast.loading(`Vérification du groupe ${groupFilter}... Cela peut prendre une minute.`);
     
     try {
       const response = await apiService.verifyGroup(groupFilter);
       setResults(response);
-      toast.success(`Verification for group ${groupFilter} completed! ${response.length} students processed.`, { id: toastId });
+      toast.success(`Vérification du groupe ${groupFilter} terminée ! ${response.length} étudiants traités.`, { id: toastId });
       fetchStudents(); // Refresh data
     } catch (error: any) {
-      const msg = error.message || "Verification failed";
-      if (msg.includes("No documents")) {
-        toast.warning(`No documents uploaded for this group yet. Upload documents first.`, { id: toastId });
+      const msg = error.message || "La vérification a échoué";
+      if (msg.includes("No documents") || msg.includes("Aucun document")) {
+        toast.warning(`Aucun document téléversé pour ce groupe. Téléversez des documents d'abord.`, { id: toastId });
       } else {
-        toast.error(`Verification failed: ${msg}`, { id: toastId });
+        toast.error(`La vérification a échoué : ${msg}`, { id: toastId });
       }
       console.error(error);
     } finally {
@@ -119,10 +120,10 @@ const Students = () => {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case "verified": return <Badge variant="success">Verified</Badge>;
-      case "mismatch": return <Badge variant="destructive">Mismatch</Badge>;
-      case "pending": return <Badge variant="secondary">Pending</Badge>;
-      case "missing": return <Badge variant="outline">Missing Docs</Badge>;
+      case "verified": return <Badge variant="success">Vérifié</Badge>;
+      case "mismatch": return <Badge variant="destructive">Non Concordant</Badge>;
+      case "pending": return <Badge variant="secondary">En Attente</Badge>;
+      case "missing": return <Badge variant="outline">Docs Manquants</Badge>;
       default: return <Badge variant="secondary">{status}</Badge>;
     }
   };
@@ -131,10 +132,10 @@ const Students = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Verification Panel</h1>
-          <p className="text-muted-foreground">Select a group below and click "Verify Group" to match student documents with database records.</p>
+          <h1 className="text-2xl font-bold tracking-tight">Panneau de Vérification</h1>
+          <p className="text-muted-foreground">Sélectionnez un groupe ci-dessous et cliquez sur "Vérifier le Groupe" pour faire correspondre les documents avec les enregistrements.</p>
         </div>
-        <Button onClick={() => navigate("/import")} variant="outline">Import Student List</Button>
+        <Button onClick={() => navigate("/import")} variant="outline">Importer la liste des étudiants</Button>
       </div>
 
       <Card>
@@ -143,7 +144,7 @@ const Students = () => {
             <div className="relative flex-1">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by name or CIN..."
+                placeholder="Rechercher par nom ou CIN..."
                 className="pl-9"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -153,24 +154,24 @@ const Students = () => {
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-[160px]">
                   <Filter className="mr-2 h-4 w-4" />
-                  <SelectValue placeholder="Status" />
+                  <SelectValue placeholder="Statut" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="verified">Verified</SelectItem>
-                  <SelectItem value="mismatch">Mismatch</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="missing">Missing Docs</SelectItem>
+                  <SelectItem value="all">Tous les Statuts</SelectItem>
+                  <SelectItem value="verified">Vérifiés</SelectItem>
+                  <SelectItem value="mismatch">Non Concordants</SelectItem>
+                  <SelectItem value="pending">En Attente</SelectItem>
+                  <SelectItem value="missing">Docs Manquants</SelectItem>
                 </SelectContent>
               </Select>
 
               <Select value={groupFilter} onValueChange={setGroupFilter}>
                 <SelectTrigger className="w-[160px]">
                   <Filter className="mr-2 h-4 w-4" />
-                  <SelectValue placeholder="Group" />
+                  <SelectValue placeholder="Groupe" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Groups</SelectItem>
+                  <SelectItem value="all">Tous les Groupes</SelectItem>
                   {uniqueGroups.map(group => (
                     <SelectItem key={group} value={group}>{group}</SelectItem>
                   ))}
@@ -183,36 +184,36 @@ const Students = () => {
                   disabled={isVerifying}
                   className="bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90"
                 >
-                  {isVerifying ? "Verifying..." : `Start Verification for ${groupFilter}`}
+                  {isVerifying ? "Vérification..." : `Lancer la vérification pour ${groupFilter}`}
                 </Button>
               )}
             </div>
           </div>
           {groupFilter !== "all" && !isVerifying && (
             <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md text-sm text-blue-700">
-              <strong>Tip:</strong> Clicking "Start Verification" will process all students in <strong>{groupFilter}</strong> who have uploaded documents.
+              <strong>Astuce :</strong> Cliquer sur "Lancer la vérification" traitera tous les étudiants de <strong>{groupFilter}</strong> qui ont téléversé des documents.
             </div>
           )}
         </CardHeader>
         <CardContent>
           <div className="rounded-md border overflow-hidden">
             <Table>
-              <TableHeader className="bg-slate-800 hover:bg-slate-800">
-                <TableRow className="hover:bg-transparent border-b-0">
-                  <TableHead className="text-white font-bold uppercase py-4">CIN <ArrowUpDown className="inline h-3 w-3" /></TableHead>
-                  <TableHead className="text-white font-bold uppercase py-4">Nom <ArrowUpDown className="inline h-3 w-3" /></TableHead>
-                  <TableHead className="text-white font-bold uppercase py-4">Prénom <ArrowUpDown className="inline h-3 w-3" /></TableHead>
-                  <TableHead className="text-white font-bold uppercase py-4">Filière <ArrowUpDown className="inline h-3 w-3" /></TableHead>
-                  <TableHead className="text-white font-bold uppercase py-4">Classe <ArrowUpDown className="inline h-3 w-3" /></TableHead>
-                  <TableHead className="text-white font-bold uppercase py-4">Age <ArrowUpDown className="inline h-3 w-3" /></TableHead>
-                  <TableHead className="text-white font-bold uppercase py-4 text-center">Docs</TableHead>
-                  <TableHead className="text-white font-bold uppercase py-4 text-center">Actions</TableHead>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>CIN <ArrowUpDown className="inline h-3 w-3" /></TableHead>
+                  <TableHead>Nom <ArrowUpDown className="inline h-3 w-3" /></TableHead>
+                  <TableHead>Prénom <ArrowUpDown className="inline h-3 w-3" /></TableHead>
+                  <TableHead>Filière <ArrowUpDown className="inline h-3 w-3" /></TableHead>
+                  <TableHead>Niveau Scolaire <ArrowUpDown className="inline h-3 w-3" /></TableHead>
+                  <TableHead>Âge <ArrowUpDown className="inline h-3 w-3" /></TableHead>
+                  <TableHead className="text-center">Docs</TableHead>
+                  <TableHead className="text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8">Loading students...</TableCell>
+                    <TableCell colSpan={8} className="text-center py-8">Chargement des étudiants...</TableCell>
                   </TableRow>
                 ) : filteredStudents.length > 0 ? (
                   filteredStudents.map((student) => {
@@ -236,15 +237,15 @@ const Students = () => {
                     return (
                       <TableRow
                         key={student.id}
-                        className="cursor-pointer hover:bg-muted/50 border-b transition-colors"
+                        className="cursor-pointer"
                         onClick={() => navigate(`/students/${student.id}`)}
                       >
                         <TableCell className="font-mono text-sm py-4">{student.cin}</TableCell>
-                        <TableCell className="font-medium py-4 uppercase">{student.lastName || "-"}</TableCell>
-                        <TableCell className="font-medium py-4 capitalize">{student.firstName || "-"}</TableCell>
-                        <TableCell className="py-4">{student.filiere || "-"}</TableCell>
-                        <TableCell className="py-4 font-mono text-sm">{student.classe || "-"}</TableCell>
-                        <TableCell className="py-4">{calculateAge(student.dateOfBirth)}</TableCell>
+                        <TableCell className="font-medium py-4 uppercase">{student.Nom || "-"}</TableCell>
+                        <TableCell className="font-medium py-4 capitalize">{student.Prenom || "-"}</TableCell>
+                        <TableCell className="py-4">{student.LibelleLong || "-"}</TableCell>
+                        <TableCell className="py-4 font-mono text-sm">{student.NiveauScolaire || "-"}</TableCell>
+                        <TableCell className="py-4">{calculateAge(student.DateNaissance)}</TableCell>
                         <TableCell className="text-center py-4">
                           {(() => {
                             // documents_count is returned by withCount('documents') on the backend
@@ -282,7 +283,7 @@ const Students = () => {
                               onClick={() => navigate(`/students/${student.id}`)}
                             >
                               <Eye className="mr-1.5 h-3.5 w-3.5" />
-                              Show
+                              Voir
                             </Button>
                             <Button
                               variant="destructive"
@@ -294,7 +295,7 @@ const Students = () => {
                               }}
                             >
                               <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-                              Delete
+                              Supprimer
                             </Button>
                           </div>
                         </TableCell>
@@ -304,7 +305,7 @@ const Students = () => {
                 ) : (
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                      No students found matching your criteria
+                      Aucun étudiant ne correspond à vos critères
                     </TableCell>
                   </TableRow>
                 )}
@@ -320,12 +321,12 @@ const Students = () => {
             <div>
               <CardTitle className="text-lg flex items-center gap-2 text-primary">
                 <ShieldCheck className="h-5 w-5" />
-                Latest Verification Results: {groupFilter}
+                Derniers résultats de vérification : {groupFilter}
               </CardTitle>
-              <CardDescription>Detailed results for {results.length} students</CardDescription>
+              <CardDescription>Résultats détaillés pour {results.length} étudiants</CardDescription>
             </div>
             <Button variant="ghost" size="sm" onClick={() => setResults([])}>
-              <XCircle className="mr-2 h-4 w-4" /> Clear Results
+              <XCircle className="mr-2 h-4 w-4" /> Effacer les résultats
             </Button>
           </CardHeader>
           <CardContent className="pt-6 space-y-6">
@@ -348,27 +349,27 @@ const Students = () => {
                         </div>
                       </div>
                       <Badge variant={isCorrect ? "success" : "destructive"} className="px-3 py-1">
-                        {isCorrect ? "MATCHED" : "MISMATCH"}
+                        {isCorrect ? "CONCORDANT" : "NON CONCORDANT"}
                       </Badge>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                       <div className="p-3 rounded-lg bg-white border border-gray-100 shadow-sm">
-                        <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Extracted from Docs:</p>
+                        <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Extrait des Documents :</p>
                         <p className={`font-semibold ${isCorrect ? "text-green-700" : "text-amber-700"}`}>
-                          {res.verified_name || "Name extraction failed"}
+                          {res.verified_name || "Échec de l'extraction du nom"}
                         </p>
                       </div>
                       <div className="p-3 rounded-lg bg-white border border-gray-100 shadow-sm">
-                        <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Database Record:</p>
-                        <p className="font-semibold text-blue-700">{student?.fullName || "Not found in DB"}</p>
+                        <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Enregistrement Base de données :</p>
+                        <p className="font-semibold text-blue-700">{student ? `${student.Nom} ${student.Prenom}` : "Introuvable"}</p>
                       </div>
                     </div>
 
                     {!isCorrect && (
                       <div className="mb-4 p-4 rounded-lg bg-red-100/50 border border-red-200">
                         <p className="text-xs font-bold text-red-800 mb-2 flex items-center gap-2">
-                          <AlertCircle className="h-3 w-3" /> Mismatch / Error Details:
+                          <AlertCircle className="h-3 w-3" /> Détails des Non Concordances / Erreurs :
                         </p>
                         <ul className="space-y-1">
                           {/* Prefer DB mismatches if available, fallback to OCR errors */}
@@ -378,7 +379,7 @@ const Students = () => {
                                 <span className="shrink-0">•</span>
                                 <span>
                                   <strong>{m.field}</strong> ({m.document}): 
-                                  Expected "{m.excelValue}", Got "{m.ocrValue}"
+                                  Attendu "{m.excelValue}", Obtenu "{m.ocrValue}"
                                 </span>
                               </li>
                             ))
@@ -395,14 +396,14 @@ const Students = () => {
                     )}
 
                     <div>
-                      <p className="text-[10px] uppercase font-bold text-muted-foreground mb-2">Document Extractions:</p>
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground mb-2">Extractions de Documents :</p>
                       <div className="flex flex-wrap gap-3">
                         {res.file_details && res.file_details.map((detail: any, i: number) => (
                           <div key={i} className="flex-1 min-w-[200px] p-3 rounded-lg bg-white/50 border border-gray-100">
                             <p className="text-[10px] font-bold truncate mb-1" title={detail.file}>{detail.file}</p>
                             <div className="flex items-center justify-between gap-2">
                               <span className="text-xs text-muted-foreground truncate">
-                                {detail.extracted_name || detail.extracted_cie || "No data extracted"}
+                                {detail.extracted_name || detail.extracted_cie || "Aucune donnée extraite"}
                               </span>
                               {detail.extracted_dob && (
                                 <Badge variant="outline" className="text-[10px] font-normal py-0">
@@ -424,15 +425,15 @@ const Students = () => {
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogTitle>Êtes-vous absolument sûr ?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete <strong>{studentToDelete?.fullName}</strong> from the database.
+              Cette action est irréversible. Cela supprimera définitivement <strong>{studentToDelete?.Nom} {studentToDelete?.Prenom}</strong> de la base de données.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Delete
+              Supprimer
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

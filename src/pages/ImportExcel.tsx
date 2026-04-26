@@ -48,7 +48,7 @@ const ImportExcel = () => {
     try {
       // Map Excel data to student structure
       const students = previewData.map(row => {
-        // Find values by checking keys case-insensitively and ignoring accents if possible
+        // Find values by checking keys case-insensitively
         const getValue = (possibleKeys: string[]) => {
           const keys = Object.keys(row);
           // Try exact matches first
@@ -57,57 +57,37 @@ const ImportExcel = () => {
           );
           if (exactMatch) return row[exactMatch];
 
-          // Try partial matches (e.g. "Prenom (Fr)" matching "prenom")
+          // Try partial matches
           const partialMatch = keys.find(k =>
             possibleKeys.some(pk => k.toLowerCase().includes(pk.toLowerCase()) && pk.length > 3)
           );
           return partialMatch ? row[partialMatch] : null;
         };
 
-        const cin = (getValue(["cin", "id", "cin_number"]) || "").toString().trim().toUpperCase();
-        const studentId = (getValue(["id", "student_id", "cne", "massar"]) || cin || Math.random().toString(36).substr(2, 9)).toString().trim();
-
-        // Robust name handling
-        let prenom = (getValue(["prenom", "prénom", "prã©nom", "prã©nom", "first name", "firstname"]) || "").toString().trim();
-        let nom = (getValue(["nom", "last name", "lastname", "surname"]) || "").toString().trim();
-        const fullNameFromRow = (getValue(["fullName", "full name", "name", "nom complet"]) || "").toString().trim();
-
-        // Only split if BOTH are missing but we have a fullName
-        if (!nom && !prenom && fullNameFromRow && fullNameFromRow.includes(" ")) {
-          const parts = fullNameFromRow.split(" ");
-          nom = parts[0];
-          prenom = parts.slice(1).join(" ");
-        }
-
-        // Prioritize Nom + Prénom concatenation as requested
-        const fullName = (nom && prenom)
-          ? `${nom} ${prenom}`.trim()
-          : (fullNameFromRow || nom || prenom || "Unknown Student");
-
         return {
-          id: studentId,
-          firstName: prenom,
-          lastName: nom,
-          fullName: fullName,
-          dateOfBirth: getValue(["dateOfBirth", "dob", "date de naissance"]),
-          birthplace: getValue(["birthplace", "lieu de naissance"]),
-          cin: cin,
-          filiere: getValue(["filiere", "filière", "branch"]),
-          classe: getValue(["classe", "class"]),
-          group: getValue(["group", "groupe"]),
-          parentName: getValue(["parentName", "parent name", "nom du parent"]),
-          bacYear: getValue(["bacYear", "bac year", "année du bac"]),
-          bacScore: getValue(["bacScore", "bac score", "moyenne du bac"]),
-          bacMention: getValue(["bacMention", "bac mention", "mention du bac"]),
+          MatriculeEtudiant: getValue(["MatriculeEtudiant", "matriculeetudiant"]),
+          Nom: getValue(["Nom", "nom"]),
+          Prenom: getValue(["Prenom", "prenom"]),
+          LibelleLong: getValue(["LibelleLong", "libellelong"]),
+          CodeDiplome: getValue(["CodeDiplome", "codediplome"]),
+          DateNaissance: getValue(["DateNaissance", "datenaissance"]),
+          Site: getValue(["Site", "site"]),
+          CIN: getValue(["CIN", "cin"]),
+          NTelephone: getValue(["NTelephone", "ntelephone"]),
+          Nationalite: getValue(["Nationalite", "nationalite"]),
+          anneeEtude: getValue(["anneeEtude", "anneeetude"]),
+          Nom_Arabe: getValue(["Nom_Arabe", "nom_arabe"]),
+          Prenom_arabe: getValue(["Prenom_arabe", "prenom_arabe"]),
+          NiveauScolaire: getValue(["NiveauScolaire", "niveauscolaire"]),
         };
       });
 
       await apiService.bulkStoreStudents(students);
       setImported(true);
-      toast.success(`${students.length} students imported successfully`);
+      toast.success(`${students.length} étudiants importés avec succès`);
     } catch (error: any) {
-      console.error("Import error:", error);
-      const message = error.message || "Failed to import students to the database";
+      console.error("Erreur d'importation :", error);
+      const message = error.message || "Échec de l'importation des étudiants dans la base de données";
       toast.error(message);
     } finally {
       setImporting(false);
@@ -115,26 +95,27 @@ const ImportExcel = () => {
   };
 
   const excelColumns = [
-    { name: "cin",              example: "AB123456",    required: true,  description: "Numéro CIN de l'étudiant" },
-    { name: "nom",              example: "ALAOUI",       required: true,  description: "Nom de famille" },
-    { name: "prenom",           example: "Fatima",       required: true,  description: "Prénom" },
-    { name: "date de naissance",example: "2001-05-14",  required: true,  description: "Format YYYY-MM-DD" },
-    { name: "lieu de naissance",example: "Casablanca",  required: false, description: "Ville de naissance" },
-    { name: "cne",              example: "G123456789",  required: false, description: "Code national étudiant" },
-    { name: "filiere",          example: "Développement Digital", required: false, description: "Filière / branche" },
-    { name: "classe",           example: "TC-INFO",     required: false, description: "Classe" },
-    { name: "groupe",           example: "G1",          required: false, description: "Groupe" },
-    { name: "nom du parent",    example: "Hassan ALAOUI",required: false, description: "Nom du parent tuteur" },
-    { name: "année du bac",     example: "2020",        required: false, description: "Année du baccalauréat" },
-    { name: "moyenne du bac",   example: "14.5",        required: false, description: "Moyenne du bac" },
-    { name: "mention du bac",   example: "Bien",        required: false, description: "Mention obtenue" },
+    { name: "MatriculeEtudiant", example: "2005060600354", required: true,  description: "Matricule de l'étudiant (CNE/Massar)" },
+    { name: "Nom",               example: "ALAOUI",        required: true,  description: "Nom de famille (Français)" },
+    { name: "Prenom",            example: "FATIHA",        required: true,  description: "Prénom (Français)" },
+    { name: "LibelleLong",       example: "DIA_DEVOWFS...",required: true,  description: "Filière détaillée" },
+    { name: "CodeDiplome",       example: "DEVOWFS201",    required: true,  description: "Code du groupe/diplôme" },
+    { name: "DateNaissance",     example: "06/06/2005",    required: true,  description: "Date de naissance" },
+    { name: "Site",              example: "INSTITUT...",   required: true,  description: "Établissement" },
+    { name: "CIN",               example: "X436763",       required: true,  description: "Numéro CIN de l'étudiant" },
+    { name: "NTelephone",        example: "0719982950",    required: false, description: "Numéro de téléphone" },
+    { name: "Nationalite",       example: "Marocain",      required: false, description: "Nationalité" },
+    { name: "anneeEtude",        example: "2ème année",    required: false, description: "Année d'étude" },
+    { name: "Nom_Arabe",         example: "علوي",           required: false, description: "Nom de famille (Arabe)" },
+    { name: "Prenom_arabe",      example: "فتيحة",          required: false, description: "Prénom (Arabe)" },
+    { name: "NiveauScolaire",    example: "Baccalauréat",  required: false, description: "Niveau scolaire" },
   ];
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Import Student Data</h1>
-        <p className="text-muted-foreground">Upload an Excel file with student records</p>
+        <h1 className="text-2xl font-bold tracking-tight">Importer les données des étudiants</h1>
+        <p className="text-muted-foreground">Téléversez un fichier Excel avec les enregistrements des étudiants</p>
       </div>
 
       {/* Excel Structure Guide */}
@@ -214,12 +195,12 @@ const ImportExcel = () => {
           >
             <FileSpreadsheet className="h-12 w-12 text-primary/60" />
             <div className="text-center">
-              <p className="font-medium">Drag & drop your Excel file here</p>
-              <p className="text-sm text-muted-foreground">Supports .xlsx and .csv files</p>
+              <p className="font-medium">Glissez et déposez votre fichier Excel ici</p>
+              <p className="text-sm text-muted-foreground">Prend en charge les fichiers .xlsx et .csv</p>
             </div>
             <label>
               <input type="file" accept=".xlsx,.csv,.xls" className="hidden" onChange={handleFileSelect} />
-              <Button variant="outline" asChild><span>Browse Files</span></Button>
+              <Button variant="outline" asChild><span>Parcourir les fichiers</span></Button>
             </label>
           </div>
           {file && (
@@ -236,8 +217,8 @@ const ImportExcel = () => {
       {file && previewData.length > 0 && !imported && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Preview</CardTitle>
-            <CardDescription>Review the data before importing</CardDescription>
+            <CardTitle className="text-base">Aperçu</CardTitle>
+            <CardDescription>Vérifiez les données avant de les importer</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
@@ -262,13 +243,13 @@ const ImportExcel = () => {
             </div>
             {previewData.length > 5 && (
               <p className="p-4 text-xs text-center text-muted-foreground">
-                Showing first 5 of {previewData.length} records
+                Affichage des 5 premiers sur {previewData.length} enregistrements
               </p>
             )}
           </CardContent>
           <div className="flex justify-end p-4">
             <Button onClick={handleImport} disabled={importing}>
-              {importing ? "Importing..." : `Import ${previewData.length} Students`}
+              {importing ? "Importation..." : `Importer ${previewData.length} Étudiants`}
             </Button>
           </div>
         </Card>
@@ -280,10 +261,10 @@ const ImportExcel = () => {
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
               <Check className="h-6 w-6 text-green-600" />
             </div>
-            <p className="font-semibold">Import Successful!</p>
-            <p className="text-sm text-muted-foreground">{previewData.length} students have been imported.</p>
+            <p className="font-semibold">Importation réussie !</p>
+            <p className="text-sm text-muted-foreground">{previewData.length} étudiants ont été importés.</p>
             <Button variant="outline" onClick={() => { setFile(null); setPreviewData([]); setImported(false); }}>
-              Import Another File
+              Importer un autre fichier
             </Button>
           </CardContent>
         </Card>

@@ -11,26 +11,26 @@ import {
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/students", label: "Verification Panel", icon: ShieldCheck },
-  { to: "/import", label: "Import Excel", icon: FileUp },
-  { to: "/upload", label: "Upload Documents", icon: Upload },
-  { to: "/mismatched", label: "Mismatched", icon: AlertTriangle },
-  { to: "/verified", label: "Verified", icon: CheckCircle2 },
+  { to: "/dashboard", label: "Tableau de Bord", icon: LayoutDashboard },
+  { to: "/students", label: "Panneau de Vérification", icon: ShieldCheck },
+  { to: "/import", label: "Importer Excel", icon: FileUp },
+  { to: "/upload", label: "Téléverser Documents", icon: Upload },
+  { to: "/mismatched", label: "Non Concordants", icon: AlertTriangle },
+  { to: "/verified", label: "Vérifiés", icon: CheckCircle2 },
 ];
 
 export function AppSidebar() {
   const location = useLocation();
 
   return (
-    <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col bg-sidebar text-sidebar-foreground">
-      <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-6">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary">
-          <ShieldCheck className="h-5 w-5 text-sidebar-primary-foreground" />
+    <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col bg-gradient-to-b from-sidebar to-[#040814] border-r border-sidebar-border/50 shadow-2xl text-sidebar-foreground">
+      <div className="flex h-16 items-center gap-3 border-b border-sidebar-border/50 px-6 backdrop-blur-sm">
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/20 border border-primary/30 shadow-[0_0_15px_rgba(var(--primary),0.2)]">
+          <ShieldCheck className="h-5 w-5 text-primary drop-shadow-[0_0_5px_rgba(var(--primary),0.8)]" />
         </div>
         <div>
-          <h1 className="text-sm font-bold tracking-tight text-sidebar-primary-foreground">OFPPT Verify</h1>
-          <p className="text-[10px] text-sidebar-foreground/60">Document Verification</p>
+          <h1 className="text-sm font-bold tracking-tight text-white">OFPPT Verify</h1>
+          <p className="text-[10px] text-muted-foreground font-medium tracking-wide">Vérification de Documents</p>
         </div>
       </div>
 
@@ -42,14 +42,20 @@ export function AppSidebar() {
               key={item.to}
               to={item.to}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-300 relative overflow-hidden",
                 isActive
-                  ? "bg-sidebar-accent text-sidebar-primary"
-                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  ? "bg-primary/10 text-primary shadow-[inset_3px_0_0_0_hsl(var(--primary))]"
+                  : "text-sidebar-foreground/60 hover:bg-white/5 hover:text-white"
               )}
             >
-              <item.icon className="h-4 w-4" />
-              {item.label}
+              {isActive && (
+                <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-transparent pointer-events-none" />
+              )}
+              <item.icon className={cn(
+                "h-4 w-4 transition-transform duration-300 relative z-10", 
+                isActive ? "scale-110 drop-shadow-[0_0_8px_hsl(var(--primary))]" : "group-hover:scale-110"
+              )} />
+              <span className="relative z-10 tracking-wide">{item.label}</span>
             </NavLink>
           );
         })}

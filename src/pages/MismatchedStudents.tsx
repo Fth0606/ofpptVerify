@@ -11,10 +11,10 @@ import { toast } from "sonner";
 
 const docLabel = (doc: string) => {
   switch (doc) {
-    case "birth_certificate": return "Birth Certificate";
-    case "baccalaureate": return "Baccalaureate";
+    case "birth_certificate": return "Extrait de Naissance";
+    case "baccalaureate": return "Baccalauréat";
     case "cin": return "CIN";
-    case "ocr_process": return "OCR Search";
+    case "ocr_process": return "Recherche OCR";
     case "verification": return "Validation";
     default: return doc;
   }
@@ -31,7 +31,7 @@ const MismatchedStudents = () => {
         const data = await apiService.fetchStudents();
         setStudents(data.filter(s => s.status === "mismatch"));
       } catch (error) {
-        toast.error("Failed to load mismatched students");
+        toast.error("Échec du chargement des étudiants non concordants");
       } finally {
         setLoading(false);
       }
@@ -54,9 +54,9 @@ const MismatchedStudents = () => {
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <AlertTriangle className="h-6 w-6 text-warning" />
-            Students with Mismatches
+            Étudiants avec Non Concordances
           </h1>
-          <p className="text-muted-foreground">Students whose document data differs from Excel records, grouped by filière and classe</p>
+          <p className="text-muted-foreground">Étudiants dont les données des documents diffèrent des enregistrements Excel, regroupés par filière et classe</p>
         </div>
         {students.length > 0 && (
           <div className="flex gap-2">
@@ -73,8 +73,8 @@ const MismatchedStudents = () => {
       {Object.keys(grouped).length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-3 py-12">
-            <p className="font-medium text-success">No mismatches found!</p>
-            <p className="text-sm text-muted-foreground">All student data matches their documents</p>
+            <p className="font-medium text-success">Aucune non concordance trouvée !</p>
+            <p className="text-sm text-muted-foreground">Toutes les données des étudiants correspondent à leurs documents</p>
           </CardContent>
         </Card>
       ) : (
@@ -94,13 +94,13 @@ const MismatchedStudents = () => {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Full Name</TableHead>
+                        <TableHead>Nom Complet</TableHead>
                         <TableHead>CIN</TableHead>
-                        <TableHead>Date of Birth</TableHead>
-                        <TableHead>Birthplace</TableHead>
-                        <TableHead>Group</TableHead>
+                        <TableHead>Date de Naissance</TableHead>
+                        <TableHead>Lieu de Naissance</TableHead>
+                        <TableHead>Groupe</TableHead>
                         <TableHead>Bac</TableHead>
-                        <TableHead>Issues</TableHead>
+                        <TableHead>Problèmes</TableHead>
                         <TableHead></TableHead>
                       </TableRow>
                     </TableHeader>
@@ -115,15 +115,15 @@ const MismatchedStudents = () => {
                               className="cursor-pointer hover:bg-warning/5"
                               onClick={() => setExpandedStudent(isExpanded ? null : student.id)}
                             >
-                              <TableCell className="font-medium">{student.fullName}</TableCell>
+                              <TableCell className="font-medium">{student.Nom} {student.Prenom}</TableCell>
                               <TableCell>{student.cin}</TableCell>
-                              <TableCell>{student.dateOfBirth}</TableCell>
-                              <TableCell>{student.birthplace}</TableCell>
-                              <TableCell>{student.group}</TableCell>
-                              <TableCell className="text-xs">{student.bacScore} ({student.bacMention})</TableCell>
+                              <TableCell>{student.DateNaissance}</TableCell>
+                              <TableCell>{student.Nationalite || "-"}</TableCell>
+                              <TableCell>{student.CodeDiplome}</TableCell>
+                              <TableCell className="text-xs">{student.NiveauScolaire || "-"}</TableCell>
                               <TableCell>
                                 <Badge className="bg-warning/15 text-warning border-0">
-                                  {mm ? mm.mismatches.length : "?"} issue{mm && mm.mismatches.length > 1 ? "s" : ""}
+                                  {mm ? mm.mismatches.length : "?"} problème{mm && mm.mismatches.length > 1 ? "s" : ""}
                                 </Badge>
                               </TableCell>
                               <TableCell>
@@ -134,21 +134,21 @@ const MismatchedStudents = () => {
                               <TableRow key={`${student.id}-detail`}>
                                 <TableCell colSpan={8} className="bg-destructive/5 p-4">
                                   <div className="space-y-2">
-                                    <p className="text-sm font-semibold text-destructive">Mismatch Details:</p>
-                                    {mm.mismatches.map((m, i) => (
+                                    <p className="text-sm font-semibold text-destructive">Détails des Non Concordances :</p>
+                                    {mm.mismatches.map((m: any, i: number) => (
                                       <div key={i} className="flex items-center gap-4 rounded-lg border border-destructive/20 bg-background p-3">
                                         <Badge variant="outline" className="text-xs shrink-0">{docLabel(m.document || "OCR")}</Badge>
                                         <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
-                                          <span className="font-medium text-destructive">{m.field || "Difference"}</span>
-                                          <span className="truncate">Excel: <strong>{m.excelValue || "N/A"}</strong></span>
-                                          <span className="truncate">Document: <strong className="text-destructive">{m.ocrValue || "Empty"}</strong></span>
+                                          <span className="font-medium text-destructive">{m.field || "Différence"}</span>
+                                          <span className="truncate">Excel : <strong>{m.excelValue || "N/A"}</strong></span>
+                                          <span className="truncate">Document : <strong className="text-destructive">{m.ocrValue || "Vide"}</strong></span>
                                         </div>
                                       </div>
                                     ))}
                                     <div className="mt-4 pt-4 border-t border-destructive/10 grid grid-cols-3 gap-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                                       <div>CIN: <span className="text-foreground">{student.cin}</span></div>
-                                      <div>Student: <span className="text-foreground">{student.fullName}</span></div>
-                                      <div>Bac Year: <span className="text-foreground">{student.bacYear}</span></div>
+                                      <div>Étudiant: <span className="text-foreground">{student.fullName || `${student.Nom} ${student.Prenom}`}</span></div>
+                                      <div>Code Diplôme: <span className="text-foreground">{student.CodeDiplome}</span></div>
                                     </div>
                                   </div>
                                 </TableCell>

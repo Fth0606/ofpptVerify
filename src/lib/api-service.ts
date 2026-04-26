@@ -22,22 +22,23 @@ export interface StudentDocument {
 
 export interface Student {
   id: string;
-  firstName: string;
-  lastName: string;
-  fullName: string;
-  dateOfBirth: string;
-  birthplace: string;
+  MatriculeEtudiant: string;
+  Nom: string;
+  Prenom: string;
+  LibelleLong: string;
+  CodeDiplome: string;
+  DateNaissance: string;
+  Site: string;
   cin: string;
-  filiere: string;
-  classe: string;
-  group: string;
+  NTelephone: string;
+  Nationalite: string;
+  anneeEtude: string;
+  Nom_Arabe: string;
+  Prenom_arabe: string;
+  NiveauScolaire: string;
   status: VerificationStatus;
   documentsUploaded: number;
   documents_count?: number;
-  parentName: string;
-  bacYear: string;
-  bacScore: string;
-  bacMention: string;
   mismatch_details?: any[];
   documents_list?: StudentDocument[];
 }

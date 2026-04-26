@@ -87,7 +87,7 @@ const UploadDocuments = () => {
           cin,
           folder: cin,
           is_correct: !!student,
-          verified_name: `${count} file(s) stored`,
+          verified_name: `${count} fichier(s) stocké(s)`,
           student_name: student?.fullName,
           errors: [],
           file_details: []
@@ -96,10 +96,10 @@ const UploadDocuments = () => {
 
       setProgress(100);
       setDone(true);
-      toast.success("Documents uploaded and stored successfully");
+      toast.success("Documents téléversés et stockés avec succès");
     } catch (error: any) {
-      console.error("Upload error:", error);
-      toast.error(`Error: ${error.message || "An error occurred during document upload"}`);
+      console.error("Erreur de téléversement :", error);
+      toast.error(`Erreur : ${error.message || "Une erreur est survenue lors du téléversement des documents"}`);
     } finally {
       setUploading(false);
     }
@@ -108,20 +108,20 @@ const UploadDocuments = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Upload Student Documents</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Téléverser les documents des étudiants</h1>
         <p className="text-muted-foreground">
-          Upload folder or multiple images containing: <code className="rounded bg-muted px-1.5 py-0.5 text-xs">Filière / Classe / Student Documents (images)</code>
+          Téléversez un dossier ou plusieurs images contenant : <code className="rounded bg-muted px-1.5 py-0.5 text-xs">Filière / Classe / Documents étudiants (images)</code>
         </p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Expected Folder Structure</CardTitle>
-          <CardDescription>Upload a folder where each student has their own sub-folder named with their CIN (e.g., BB123456)</CardDescription>
+          <CardTitle className="text-base">Structure de dossier attendue</CardTitle>
+          <CardDescription>Téléversez un dossier où chaque étudiant a son propre sous-dossier nommé avec son CIN (ex: BB123456)</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="rounded-lg bg-muted/50 p-4 font-mono text-sm space-y-1">
-            <p className="flex items-center gap-2"><FolderOpen className="h-4 w-4 text-primary" /> 📁 Root Folder/</p>
+            <p className="flex items-center gap-2"><FolderOpen className="h-4 w-4 text-primary" /> 📁 Dossier Racine/</p>
             <p className="ml-6 flex items-center gap-2"><FolderOpen className="h-4 w-4 text-primary" /> 📁 BB123456/</p>
             <p className="ml-12 text-muted-foreground">🖼️ birth.jpg</p>
             <p className="ml-12 text-muted-foreground">🖼️ bac.jpg</p>
@@ -136,8 +136,8 @@ const UploadDocuments = () => {
         <CardContent className="p-6">
           <div className="flex flex-col items-center gap-4 rounded-xl border-2 border-dashed border-primary/30 bg-primary/5 p-12">
             <Upload className="h-12 w-12 text-primary/60" />
-            <p className="font-medium">Select folder or images to process</p>
-            <p className="text-sm text-muted-foreground">AI will extract and match names automatically</p>
+            <p className="font-medium">Sélectionner un dossier ou des images à traiter</p>
+            <p className="text-sm text-muted-foreground">L'IA extraira et fera correspondre les noms automatiquement</p>
             <input
               type="file"
               ref={fileInputRef}
@@ -156,11 +156,11 @@ const UploadDocuments = () => {
             <div className="flex flex-wrap gap-3 justify-center">
               <Button variant="outline" onClick={handleFolderSelect} disabled={uploading}>
                 <FolderOpen className="mr-2 h-4 w-4" />
-                Select Folder
+                Sélectionner un dossier
               </Button>
               <Button variant="outline" onClick={handleZipSelect} disabled={uploading}>
                 <Upload className="mr-2 h-4 w-4" />
-                Select ZIP File
+                Sélectionner un fichier ZIP
               </Button>
             </div>
           </div>
@@ -175,7 +175,7 @@ const UploadDocuments = () => {
               <span className="text-sm font-medium">{progress}%</span>
             </div>
             <p className="text-xs text-muted-foreground">
-              {progress < 100 ? "Uploading and processing documents with OCR..." : "Processing complete"}
+              {progress < 100 ? "Téléversement et traitement des documents avec OCR..." : "Traitement terminé"}
             </p>
           </CardContent>
         </Card>
@@ -185,11 +185,11 @@ const UploadDocuments = () => {
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center justify-between">
-              <span>Document Upload Summary</span>
+              <span>Résumé du téléversement de documents</span>
               <div className="flex gap-2 items-center">
-                <Badge variant="secondary">{results.length} students</Badge>
+                <Badge variant="secondary">{results.length} étudiants</Badge>
                 <Button size="sm" onClick={() => navigate("/students")} className="h-8">
-                  Go to Verification
+                  Aller à la vérification
                 </Button>
               </div>
             </CardTitle>
@@ -203,20 +203,20 @@ const UploadDocuments = () => {
                     <span className="font-bold">CIN: {res.cin}</span>
                   </div>
                   <Badge variant={res.is_correct ? "success" : "destructive"}>
-                    {res.is_correct ? "Linked to Student" : "Not Found"}
+                    {res.is_correct ? "Lié à l'étudiant" : "Introuvable"}
                   </Badge>
                 </div>
 
                 <div className="text-sm font-medium mb-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {res.verified_name && (
                     <div className="p-2 rounded bg-white/50 border">
-                      <p className="text-xs text-muted-foreground">Extracted from Docs:</p>
+                      <p className="text-xs text-muted-foreground">Extrait des documents :</p>
                       <p className="text-green-800">{res.verified_name}</p>
                     </div>
                   )}
                   {res.student_name && (
                     <div className="p-2 rounded bg-white/50 border">
-                      <p className="text-xs text-muted-foreground">Database Record:</p>
+                      <p className="text-xs text-muted-foreground">Enregistrement Base de données :</p>
                       <p className="text-blue-800">{res.student_name}</p>
                     </div>
                   )}
@@ -224,22 +224,22 @@ const UploadDocuments = () => {
 
                 {res.db_mismatch && (
                   <p className="text-xs text-red-600 font-bold mb-2 flex items-center gap-1">
-                    <FileWarning className="h-3 w-3" /> Data mismatch: Document name does not match database record
+                    <FileWarning className="h-3 w-3" /> Non concordance : Le nom sur le document ne correspond pas à l'enregistrement
                   </p>
                 )}
 
                 {!res.student_name && (
                   <p className="text-xs text-amber-600 font-bold mb-2 flex items-center gap-1">
-                    <AlertCircle className="h-3 w-3" /> Warning: No student found in database with CIN {res.cin}
+                    <AlertCircle className="h-3 w-3" /> Avertissement : Aucun étudiant trouvé avec le CIN {res.cin}
                   </p>
                 )}
 
                 {res.mismatch_details && (res.mismatch_details as any[]).length > 0 && (
                   <div className="mt-2 p-2 rounded bg-red-100/50 border border-red-200">
-                    <p className="text-xs font-bold text-red-800 mb-1">Mismatch Details:</p>
+                    <p className="text-xs font-bold text-red-800 mb-1">Détails des Non Concordances :</p>
                     {(res.mismatch_details as any[]).map((m: any, i: number) => (
                       <p key={i} className="text-[10px] text-red-700">
-                        • <strong>{m.document}</strong>: {m.field} mismatch (Expected: "{m.excelValue}", Got: "{m.ocrValue}")
+                        • <strong>{m.document}</strong>: {m.field} non concordant (Attendu: "{m.excelValue}", Obtenu: "{m.ocrValue}")
                       </p>
                     ))}
                   </div>
@@ -259,7 +259,7 @@ const UploadDocuments = () => {
                   {res.file_details.map((detail, i) => (
                     <div key={i} className="text-xs p-2 rounded bg-white/50 border border-gray-100">
                       <p className="font-semibold truncate" title={detail.file}>{detail.file}</p>
-                      <p className="text-gray-600">Extracted: {detail.extracted_name || "N/A"}</p>
+                      <p className="text-gray-600">Extrait : {detail.extracted_name || "N/A"}</p>
                     </div>
                   ))}
                 </div>

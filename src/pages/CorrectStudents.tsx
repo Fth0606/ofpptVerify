@@ -19,7 +19,7 @@ const CorrectStudents = () => {
         const data = await apiService.fetchStudents();
         setStudents(data.filter(s => s.status === "verified"));
       } catch (error) {
-        toast.error("Failed to load verified students");
+        toast.error("Échec du chargement des étudiants vérifiés");
       } finally {
         setLoading(false);
       }
@@ -35,9 +35,9 @@ const CorrectStudents = () => {
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <CheckCircle2 className="h-6 w-6 text-success" />
-            Verified Students
+            Étudiants Vérifiés
           </h1>
-          <p className="text-muted-foreground">Students whose document data matches Excel records, grouped by filière and classe</p>
+          <p className="text-muted-foreground">Étudiants dont les données des documents correspondent aux enregistrements Excel, regroupés par filière et classe</p>
         </div>
         {students.length > 0 && (
           <div className="flex gap-2">
@@ -54,8 +54,8 @@ const CorrectStudents = () => {
       {Object.keys(grouped).length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-3 py-12">
-            <p className="font-medium">No verified students yet</p>
-            <p className="text-sm text-muted-foreground">Upload and verify documents to see results here</p>
+            <p className="font-medium">Aucun étudiant vérifié pour le moment</p>
+            <p className="text-sm text-muted-foreground">Téléversez et vérifiez les documents pour voir les résultats ici</p>
           </CardContent>
         </Card>
       ) : (
@@ -65,7 +65,7 @@ const CorrectStudents = () => {
               <CardTitle className="text-lg flex items-center gap-2">
                 <Badge variant="outline" className="text-sm font-semibold px-3 py-1">{filiere}</Badge>
                 <span className="text-xs text-muted-foreground ml-2">
-                  {Object.values(classes).flat().length} student{Object.values(classes).flat().length > 1 ? "s" : ""}
+                  {Object.values(classes).flat().length} étudiant{Object.values(classes).flat().length > 1 ? "s" : ""}
                 </span>
               </CardTitle>
             </CardHeader>
@@ -76,13 +76,13 @@ const CorrectStudents = () => {
                     Classe: {classe}
                   </h3>
                   <Table>
-                    <TableHeader className="bg-slate-800 hover:bg-slate-800">
-                      <TableRow className="hover:bg-transparent border-b-0">
-                        <TableHead className="text-white font-bold uppercase py-4">CIN</TableHead>
-                        <TableHead className="text-white font-bold uppercase py-4">Nom</TableHead>
-                        <TableHead className="text-white font-bold uppercase py-4">Prénom</TableHead>
-                        <TableHead className="text-white font-bold uppercase py-4 text-center">Age</TableHead>
-                        <TableHead className="text-white font-bold uppercase py-4 text-center">Status</TableHead>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>CIN</TableHead>
+                        <TableHead>Nom</TableHead>
+                        <TableHead>Prénom</TableHead>
+                        <TableHead className="text-center">Âge</TableHead>
+                        <TableHead className="text-center">Statut</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -105,14 +105,14 @@ const CorrectStudents = () => {
                         };
 
                         return (
-                          <TableRow key={student.id} className="border-b">
+                          <TableRow key={student.id}>
                             <TableCell className="font-mono text-xs">{student.cin}</TableCell>
-                            <TableCell className="font-medium uppercase">{student.lastName || "-"}</TableCell>
-                            <TableCell className="font-medium capitalize">{student.firstName || "-"}</TableCell>
-                            <TableCell className="text-center">{calculateAge(student.dateOfBirth)}</TableCell>
+                            <TableCell className="font-medium uppercase">{student.Nom || "-"}</TableCell>
+                            <TableCell className="font-medium capitalize">{student.Prenom || "-"}</TableCell>
+                            <TableCell className="text-center">{calculateAge(student.DateNaissance)}</TableCell>
                             <TableCell className="text-center">
                               <Badge className="bg-success/15 text-success border-0">
-                                <CheckCircle2 className="h-3 w-3 mr-1" />Verified
+                                <CheckCircle2 className="h-3 w-3 mr-1" />Vérifié
                               </Badge>
                             </TableCell>
                           </TableRow>
