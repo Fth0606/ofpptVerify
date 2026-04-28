@@ -1,5 +1,5 @@
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
-const OCR_URL = import.meta.env.VITE_OCR_URL || "http://localhost:5001";
+const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api";
+const OCR_URL = import.meta.env.VITE_OCR_URL || "http://127.0.0.1:5001";
 import { VerificationStatus } from "./mock-data";
 
 // ─────────────────────────────────────────────────────────
@@ -33,8 +33,6 @@ export interface Student {
   NTelephone: string;
   Nationalite: string;
   anneeEtude: string;
-  Nom_Arabe: string;
-  Prenom_arabe: string;
   NiveauScolaire: string;
   status: VerificationStatus;
   documentsUploaded: number;
@@ -48,7 +46,9 @@ export interface Student {
 // ─────────────────────────────────────────────────────────
 
 const getHeaders = (isJson = true) => {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = {
+    "Accept": "application/json",
+  };
   if (isJson) {
     headers["Content-Type"] = "application/json; charset=UTF-8";
   }
@@ -171,7 +171,9 @@ export const apiService = {
 
     const response = await fetch(`${API_URL}/students/${studentId}/documents`, {
       method: "POST",
-      headers: getHeaders(false),
+      headers: {
+        "Accept": "application/json",
+      },
       body: formData,
     });
     if (!response.ok) throw new Error("Failed to upload document");
@@ -187,7 +189,9 @@ export const apiService = {
 
     const response = await fetch(`${API_URL}/students/bulk-upload-documents`, {
       method: "POST",
-      headers: getHeaders(false),
+      headers: {
+        "Accept": "application/json",
+      },
       body: formData,
     });
     if (!response.ok) {

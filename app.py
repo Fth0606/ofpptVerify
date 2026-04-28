@@ -3,7 +3,12 @@ from glob import glob
 import cv2
 import numpy as np
 import easyocr
-from paddleocr import PaddleOCR
+try:
+    from paddleocr import PaddleOCR
+except ImportError:
+    print("PaddleOCR not installed, skipping.")
+    PaddleOCR = None
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import zipfile
@@ -16,13 +21,17 @@ from difflib import SequenceMatcher
 
 # Load OCR models
 try:
+    # Use ['fr', 'en'] for reliable French/Latin extraction as default
     reader_easyocr = easyocr.Reader(['fr', 'en'], gpu=False)
 except Exception as e:
     print(f"Error loading EasyOCR: {e}")
     reader_easyocr = None
 
 try:
-    reader_paddle = PaddleOCR(use_angle_cls=True, lang='fr')
+    if PaddleOCR:
+        reader_paddle = PaddleOCR(use_angle_cls=True, lang='fr')
+    else:
+        reader_paddle = None
 except Exception as e:
     print(f"Error loading PaddleOCR: {e}")
     reader_paddle = None
@@ -57,12 +66,37 @@ def sort_blocks_reading_order(ocr_blocks):
 
 def normalize_date(date_str):
     if not date_str: return None
-    clean_date = re.sub(r'[^0-9\.\-\/:]', '', date_str)
-    clean_date = re.sub(r'[\.\-\/:]', '/', clean_date)
-    parts = clean_date.split('/')
-    if len(parts) == 3:
-        return f"{parts[0].zfill(2)}/{parts[1].zfill(2)}/{parts[2]}"
-    return clean_date
+    # Ensure it's a string and remove whitespace
+    s = str(date_str).strip()
+    # Replace all common separators with /
+    clean = re.sub(r'[\.\-\/:\s]', '/', s)
+    # Remove any non-numeric chars except /
+    clean = re.sub(r'[^0-9/]', '', clean)
+    parts = [p for p in clean.split('/') if p]
+    
+    if len(parts) >= 3:
+        # Case YYYY/MM/DD...
+        if len(parts[0]) == 4:
+            y, m, d = parts[0], parts[1], parts[2]
+            return f"{d.zfill(2)}/{m.zfill(2)}/{y}"
+        # Case DD/MM/YYYY...
+        elif len(parts[2]) == 4:
+            d, m, y = parts[0], parts[1], parts[2]
+            return f"{d.zfill(2)}/{m.zfill(2)}/{y}"
+        # Case DD/MM/YY...
+        elif len(parts[2]) == 2:
+            d, m, y = parts[0], parts[1], parts[2]
+            y = "20" + y if int(y) <= 69 else "19" + y
+            return f"{d.zfill(2)}/{m.zfill(2)}/{y}"
+            
+    # Fallback: if it's already DD/MM/YYYY but maybe with different separators
+    m = re.search(r'(\d{1,2})[\./\-](\d{1,2})[\./\-](\d{2,4})', s)
+    if m:
+        d, m, y = m.group(1), m.group(2), m.group(3)
+        if len(y) == 2: y = "20" + y if int(y) <= 69 else "19" + y
+        return f"{d.zfill(2)}/{m.zfill(2)}/{y}"
+
+    return s
 
 
 def parse_date_to_ddmmyyyy(date_fragment):
@@ -70,16 +104,27 @@ def parse_date_to_ddmmyyyy(date_fragment):
     clean = re.sub(r"[^0-9\.\-\/\s]", "", date_fragment).strip()
     clean = re.sub(r"[\.\-\/\s]+", "/", clean)
     parts = [p for p in clean.split("/") if p]
+    
     if len(parts) == 3:
-        d, m, y = parts[0], parts[1], parts[2]
-        if len(y) == 2: y = "20" + y if int(y) <= 69 else "19" + y
+        # Check if first part is year
+        if len(parts[0]) == 4:
+            y, m, d = parts[0], parts[1], parts[2]
+        else:
+            d, m, y = parts[0], parts[1], parts[2]
+            
+        if len(y) == 2: 
+            y = "20" + y if int(y) <= 69 else "19" + y
+            
         try:
             day_i, month_i, year_i = int(d), int(m), int(y)
+            # Basic validation
             if 1 <= day_i <= 31 and 1 <= month_i <= 12 and 1900 <= year_i <= 2100:
                 return f"{day_i:02d}/{month_i:02d}/{year_i}"
-        except ValueError: pass
+        except ValueError: 
+            pass
+            
     try:
-        dt = dateutil_parser.parse(date_fragment, dayfirst=True, fuzzy=False)
+        dt = dateutil_parser.parse(date_fragment, dayfirst=True, fuzzy=True)
         return f"{dt.day:02d}/{dt.month:02d}/{dt.year}"
     except Exception:
         return None
@@ -157,27 +202,50 @@ def extract_cin_number(full_text, ocr_blocks):
 
 def extract_cne_number(full_text):
     if not full_text: return None
-    clean_text = re.sub(r'[^A-Za-z0-9]', '', full_text).upper()
-    m = re.search(r'([A-Z]\d{8,9})', clean_text)
+    
+    # Arabic digits normalization (convert to western digits)
+    arabic_digits = "٠١٢٣٤٥٦٧٨٩"
+    western_digits = "0123456789"
+    trans = str.maketrans(arabic_digits, western_digits)
+    text_normalized = full_text.translate(trans)
+    
+    # Try with spaces/separators first
+    m = re.search(r'\b([A-Z]\s*\d{8,10})\b', text_normalized, re.IGNORECASE)
+    if m: return re.sub(r'\s+', '', m.group(1)).upper()
+    
+    # Try compact
+    clean_text = re.sub(r'[^A-Za-z0-9]', '', text_normalized).upper()
+    m = re.search(r'([A-Z]\d{8,10})', clean_text)
     if m: return m.group(1)
+    
+    # Fallback for old numeric CNEs (usually 8-10 digits)
+    m = re.search(r'\b(\d{8,10})\b', text_normalized)
+    if m: return m.group(1)
+    
     return None
+
+import unicodedata
 
 def clean_string_for_match(s):
     """Normalize a string to lowercase alphanumerics and spaces for fuzzy matching."""
     if not s:
         return ""
+    
+    # 1. Latin Character Normalization
+    # Normalize accents
+    s = unicodedata.normalize('NFKD', s).encode('ascii', 'ignore').decode('ascii') if any(ord(c) < 128 for c in s) else s
+    
     # Replace non-alphanumeric (except spaces) with space
     s = re.sub(r"[^a-zA-Z0-9\s]", " ", s)
+    
     # Remove extra spaces
     s = re.sub(r"\s+", " ", s).strip().lower()
     return s
 
-def supervised_name_extraction(ocr_text, expected_name):
+def supervised_name_extraction(ocr_text, expected_name, is_bac=False):
     """
     Supervision: We know the expected name from the database.
     We just need to check if it occurs in the OCR output, allowing for slight OCR errors.
-    If it closely matches any segment of the OCR text, we return the expected name, 
-    effectively correcting the OCR.
     """
     if not expected_name or not ocr_text:
         return None
@@ -185,6 +253,7 @@ def supervised_name_extraction(ocr_text, expected_name):
     expected_clean = clean_string_for_match(expected_name)
     ocr_clean = clean_string_for_match(ocr_text)
     
+    # 1. Direct substring match
     if expected_clean in ocr_clean:
         return expected_name
         
@@ -194,7 +263,7 @@ def supervised_name_extraction(ocr_text, expected_name):
         
     ocr_words = ocr_clean.split()
     
-    # Check word by word intersection
+    # 2. Check word by word intersection
     intersect = set(expected_words).intersection(set(ocr_words))
     # If all or most words found anywhere
     if len(intersect) >= len(expected_words) - 1 and len(expected_words) > 1:
@@ -203,28 +272,78 @@ def supervised_name_extraction(ocr_text, expected_name):
     if len(expected_words) == 1 and len(intersect) == 1:
         return expected_name
 
-    # Check via fuzzy SequenceMatcher sliding window (approximating 85% match tolerance)
+    # 3. Check via fuzzy SequenceMatcher sliding window
+    # Lower threshold for baccalaureate since they are often low-quality scans
+    threshold = 0.7 if is_bac else 0.8
+    
     exp_len = len(expected_words)
     best_ratio = 0
+    # Sliding window of the same word count
     for i in range(len(ocr_words) - exp_len + 1):
         window = " ".join(ocr_words[i:i+exp_len])
         ratio = SequenceMatcher(None, expected_clean, window).ratio()
         if ratio > best_ratio:
             best_ratio = ratio
             
-    if best_ratio > 0.8:
+    if best_ratio >= threshold:
         return expected_name
         
+    # 4. Special case: Try reversed order of words
+    # This handles "LAST First" vs "First LAST"
+    if len(expected_words) >= 2:
+        reversed_expected = " ".join(reversed(expected_words))
+        if reversed_expected in ocr_clean:
+            return expected_name
+            
+        for i in range(len(ocr_words) - exp_len + 1):
+            window = " ".join(ocr_words[i:i+exp_len])
+            ratio = SequenceMatcher(None, reversed_expected, window).ratio()
+            if ratio >= threshold:
+                return expected_name
+
+    # 5. Last resort: Compact match (no spaces)
+    # Useful for very noisy OCR where spaces are inserted randomly
+    expected_compact = "".join(expected_words)
+    ocr_compact = "".join(ocr_words)
+    if expected_compact in ocr_compact:
+        return expected_name
+        
+    # Fuzzy compact match
+    if len(ocr_compact) >= len(expected_compact):
+        # We can't easily slide a window on characters for performance if text is huge,
+        # but for small fragments it's okay. Let's just do a simple ratio if expected is long enough.
+        if len(expected_compact) > 5:
+            # Check if expected_compact is "almost" in ocr_compact
+            # (This is a bit slow but we only do it if everything else fails)
+            for i in range(len(ocr_compact) - len(expected_compact) + 1):
+                window = ocr_compact[i:i+len(expected_compact)]
+                if SequenceMatcher(None, expected_compact, window).ratio() > 0.85:
+                    return expected_name
+
     return None
 
 
-def preprocess_image(image_path):
+def preprocess_image(image_path, is_bac=False):
     img = cv2.imread(image_path)
     if img is None: return None
+    
+    # Bac documents sometimes benefit from different preprocessing
+    if is_bac:
+        # Resize if too small
+        height, width = img.shape[:2]
+        if width < 1500:
+            scale = 1500 / width
+            img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+            
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+    
+    # Try to denoise without too much blur
+    denoised = cv2.fastNlMeansDenoising(gray, None, 10, 7, 21)
+    
+    # CLAHE for better contrast
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    enhanced = clahe.apply(blur)
+    enhanced = clahe.apply(denoised)
+    
     temp_fd, temp_path = tempfile.mkstemp(suffix=".png")
     os.close(temp_fd)
     cv2.imwrite(temp_path, enhanced)
@@ -234,68 +353,66 @@ def preprocess_image(image_path):
 def process_image(image_path, expected_name=None, expected_cin=None, expected_cne=None, is_bac=False):
     processed_path = None
     try:
-        processed_path = preprocess_image(image_path)
+        processed_path = preprocess_image(image_path, is_bac)
         img_to_ocr = processed_path if processed_path else image_path
         
-        extracted_text = ""
         ocr_blocks = []
         
-        if reader_paddle:
-            try:
-                result = reader_paddle.ocr(img_to_ocr)
-                if result and result[0]:
-                    for line in result[0]:
-                        ocr_blocks.append((line[0], line[1][0]))
-            except Exception as e:
-                print(f"PaddleOCR error: {e}")
-                
-        if not ocr_blocks and reader_easyocr:
-            try:
-                result = reader_easyocr.readtext(img_to_ocr, detail=1)
-                for res in result: ocr_blocks.append((res[0], res[1]))
-            except Exception as e:
-                print(f"EasyOCR error: {e}")
+        # Try OCR on normal image
+        def run_ocr(img_path):
+            blocks = []
+            
+            if reader_paddle: # Paddle is set to 'fr'
+                try:
+                    result = reader_paddle.ocr(img_path)
+                    if result and result[0]:
+                        for line in result[0]:
+                            blocks.append((line[0], line[1][0]))
+                except Exception as e:
+                    print(f"PaddleOCR error: {e}")
+                    
+            if not blocks and reader_easyocr:
+                try:
+                    result = reader_easyocr.readtext(img_path, detail=1)
+                    for res in result: blocks.append((res[0], res[1]))
+                except Exception as e:
+                    print(f"EasyOCR error: {e}")
+            return blocks
 
+        # 1. Main Extraction (French/Latin)
+        ocr_blocks = run_ocr(img_to_ocr)
+        if not ocr_blocks and processed_path:
+            ocr_blocks = run_ocr(image_path)
+            
         ocr_blocks = sort_blocks_reading_order(ocr_blocks)
         extracted_text = "\n".join(t for _, t in ocr_blocks)
-
-        final_data = {}
-        
-        if is_bac:
-            cne_num = extract_cne_number(extracted_text)
-            if expected_cne and expected_cne.upper() in clean_string_for_match(extracted_text).upper():
-                cne_num = expected_cne
-            if not cne_num and expected_cne and clean_string_for_match(expected_cne).upper() in clean_string_for_match(extracted_text).upper():
-                cne_num = expected_cne
-            final_data["extracted_cne"] = cne_num
-            return final_data
         
         # Supervised Name Extraction
-        supervised_name = supervised_name_extraction(extracted_text, expected_name)
-        if supervised_name:
-            final_data["extracted_name"] = supervised_name
-        else:
-            # Fallback if no expected name provided or completely missing (useful for mismatch reporting)
-            final_data["extracted_name"] = None 
-            
-        # DOB and CIN Extraction
-        dob = extract_birth_date_smart(extracted_text, ocr_blocks)
-        if dob:
-            final_data["dob"] = dob
-            
-        cin_num = extract_cin_number(extracted_text, ocr_blocks)
-        if cin_num:
-            final_data["cin"] = cin_num
-
-        return final_data
-
+        extracted_name = supervised_name_extraction(extracted_text, expected_name, is_bac)
+        is_name_match = extracted_name is not None
+        
+        # DOB Extraction
+        extracted_dob = extract_birth_date_smart(extracted_text, ocr_blocks)
+        
+        # ID Extraction
+        extracted_cin = extract_cin_number(extracted_text, ocr_blocks)
+        extracted_cne = extract_cne_number(extracted_text)
+        
+        return {
+            "file": os.path.basename(image_path),
+            "extracted_name": extracted_name or "Non détecté",
+            "is_name_match": is_name_match,
+            "extracted_dob": extracted_dob or "Non détecté",
+            "extracted_cin": extracted_cin,
+            "extracted_cne": extracted_cne,
+            "raw_text": extracted_text
+        }
     except Exception as e:
         print(f"Error processing {image_path}: {e}")
+        return {"file": os.path.basename(image_path), "error": str(e)}
     finally:
         if processed_path and os.path.exists(processed_path):
-            try: os.remove(processed_path)
-            except: pass
-    return {}
+            os.remove(processed_path)
 
 
 # Flask Application
@@ -354,76 +471,76 @@ def validate_folder():
             student_expected = expected_data.get(cin, {})
             expected_name = student_expected.get('fullName')
             expected_cin = student_expected.get('cin', cin)
-            expected_cne = student_expected.get('student_id')
+            expected_cne = student_expected.get('cne')
 
             file_details = []
-            extracted_names = []
 
             for image_path in image_paths:
                 is_bac = "baccalaureate" in os.path.basename(image_path).lower()
                 ocr_data = process_image(image_path, expected_name, expected_cin, expected_cne, is_bac)
                 
-                formatted_name = ocr_data.get('extracted_name')
-                
                 file_details.append({
                     "file": os.path.basename(image_path),
-                    "extracted_name": formatted_name,
-                    "extracted_dob": ocr_data.get('dob'),
-                    "extracted_cin": ocr_data.get('cin'),
+                    "extracted_name": ocr_data.get('extracted_name'),
+                    "extracted_dob": ocr_data.get('extracted_dob'),
+                    "extracted_cin": ocr_data.get('extracted_cin'),
                     "extracted_cne": ocr_data.get('extracted_cne'),
                     "raw_data": ocr_data
                 })
 
-                if not is_bac and formatted_name:
-                    extracted_names.append(formatted_name)
-
-            is_correct = True
+            is_name_correct = True
             is_date_correct = True
             verified_name = None
             verified_dob = None
             errors = []
 
-            baseline_name = expected_name if expected_name else (extracted_names[0] if extracted_names else "")
+            # 1. Name Verification
+            if expected_name:
+                has_any_name_match = any(d.get("extracted_name") == expected_name for d in file_details)
+                if not has_any_name_match:
+                    is_name_correct = False
+                    for detail in file_details:
+                        if not detail.get("extracted_name") or detail.get("extracted_name") == "Non détecté":
+                             errors.append({"file": detail["file"], "error": f"Nom '{expected_name}' non trouvé"})
+                else:
+                    verified_name = expected_name
+            else:
+                found_names = [d["extracted_name"] for d in file_details if d["extracted_name"] and d["extracted_name"] != "Non détecté"]
+                if not found_names:
+                    is_name_correct = False
+                    errors.append({"file": "all", "error": "Aucun nom extrait"})
+                else:
+                    baseline_name = found_names[0]
+                    is_name_correct = all(n == baseline_name for n in found_names)
+                    if is_name_correct:
+                        verified_name = baseline_name
+                    else:
+                        errors.append({"file": "all", "error": "Noms discordants entre documents"})
 
-            extracted_dobs = [d["extracted_dob"] for d in file_details if d["extracted_dob"]]
+            # 2. Date Verification
+            extracted_dobs = [d["extracted_dob"] for d in file_details if d["extracted_dob"] and d["extracted_dob"] != "Non détecté"]
             if extracted_dobs:
                 expected_dob = student_expected.get('dateOfBirth')
                 if expected_dob:
                     expected_dob_normalized = normalize_date(expected_dob)
                     is_date_correct = all(dob == expected_dob_normalized for dob in extracted_dobs)
-                    verified_dob = expected_dob_normalized if is_date_correct else None
+                    if not is_date_correct:
+                        mismatched_dobs = [dob for dob in extracted_dobs if dob != expected_dob_normalized]
+                        errors.append({
+                            "file": "all",
+                            "error": f"Date discordante. Attendu: {expected_dob_normalized}"
+                        })
+                    else:
+                        verified_dob = expected_dob_normalized
                 else:
                     baseline_dob = extracted_dobs[0]
                     is_date_correct = all(dob == baseline_dob for dob in extracted_dobs)
-                    verified_dob = baseline_dob if is_date_correct else None
-                
-                if not is_date_correct:
-                    errors.append({
-                        "file": "all",
-                        "error": f"Date mismatch among documents: {', '.join(set(extracted_dobs))}"
-                    })
-                    is_correct = False
+                    if not is_date_correct:
+                        errors.append({"file": "all", "error": "Dates discordantes entre documents"})
+                    else:
+                        verified_dob = baseline_dob
 
-            for detail in file_details:
-                is_bac_detail = "baccalaureate" in detail["file"].lower()
-                if is_bac_detail:
-                    ext_cne = detail.get("extracted_cne")
-                    if not ext_cne:
-                        errors.append({"file": detail["file"], "error": "No valid CNE could be extracted"})
-                        is_correct = False
-                    elif expected_cne and clean_string_for_match(expected_cne) != clean_string_for_match(ext_cne):
-                         errors.append({"file": detail["file"], "error": f"CNE mismatch: expected '{expected_cne}'"})
-                         is_correct = False
-                else:
-                    if not detail.get("extracted_name"):
-                        errors.append({"file": detail["file"], "error": "No valid name could be extracted"})
-                        is_correct = False
-                    elif baseline_name and detail["extracted_name"].lower() != baseline_name.lower():
-                        errors.append({"file": detail["file"], "error": f"Name mismatch: expected '{baseline_name}'"})
-                        is_correct = False
-
-            if is_correct and baseline_name:
-                verified_name = baseline_name
+            is_correct = is_name_correct and is_date_correct
 
             results.append({
                 "cin": cin,

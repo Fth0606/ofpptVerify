@@ -46,8 +46,6 @@ class StudentController extends Controller
             'NTelephone'        => 'nullable',
             'Nationalite'       => 'nullable',
             'anneeEtude'        => 'nullable',
-            'Nom_Arabe'         => 'nullable',
-            'Prenom_arabe'      => 'nullable',
             'NiveauScolaire'    => 'nullable',
         ]);
         return Student::create($data);
@@ -81,8 +79,6 @@ class StudentController extends Controller
                 'NTelephone'        => $getValue(['NTelephone', 'ntelephone', 'telephone']),
                 'Nationalite'       => $getValue(['Nationalite', 'nationalite']),
                 'anneeEtude'        => $getValue(['anneeEtude', 'anneeetude']),
-                'Nom_Arabe'         => $getValue(['Nom_Arabe', 'nom_arabe']),
-                'Prenom_arabe'      => $getValue(['Prenom_arabe', 'prenom_arabe']),
                 'NiveauScolaire'    => $getValue(['NiveauScolaire', 'niveauscolaire']),
             ];
 
@@ -251,7 +247,7 @@ class StudentController extends Controller
             // Ignore if no SUPER privilege
         }
 
-        $request->validate(['file' => 'required|file|mimes:zip|max:102400']);
+        $request->validate(['file' => 'required|file|mimes:zip|max:122880']);
 
         $zipFile  = $request->file('file');
         $zip      = new ZipArchive;
@@ -451,10 +447,10 @@ class StudentController extends Controller
                                 $docType = $m[1];
                                 $docId   = $m[2];
                                 Document::where('id', $docId)->update([
-                                    'ocr_extracted_name' => $detail['extracted_name'],
-                                    'ocr_extracted_dob'  => $detail['extracted_dob'],
-                                    'ocr_extracted_cin'  => $detail['extracted_cin'] ?? $detail['extracted_cne'] ?? null,
-                                    'ocr_status'         => 'processed',
+                                    'ocr_extracted_name'   => $detail['extracted_name'],
+                                    'ocr_extracted_dob'    => $detail['extracted_dob'],
+                                    'ocr_extracted_cin'    => $detail['extracted_cin'] ?? $detail['extracted_cne'] ?? null,
+                                    'ocr_status'           => 'processed',
                                 ]);
                             }
                         }
@@ -462,7 +458,7 @@ class StudentController extends Controller
 
                     $student->update([
                         'status'           => $isCorrect ? 'verified' : 'mismatch',
-                        'mismatch_details' => $mismatches,
+                        'mismatch_details' => $isCorrect ? null : $mismatches,
                     ]);
                 }
 

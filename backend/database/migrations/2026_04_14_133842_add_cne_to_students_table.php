@@ -16,7 +16,12 @@ return new class extends Migration
         });
         
         // Copy existing student_id to cne if it looks like a CNE
-        \Illuminate\Support\Facades\DB::statement("UPDATE students SET cne = student_id WHERE student_id REGEXP '^[A-Z][0-9]{8,9}$' AND cne IS NULL");
+        if (config('database.default') !== 'sqlite') {
+            \Illuminate\Support\Facades\DB::statement("UPDATE students SET cne = student_id WHERE student_id REGEXP '^[A-Z][0-9]{8,9}$' AND cne IS NULL");
+        } else {
+            // For SQLite, we can use a simpler LIKE or just handle it via Eloquent if needed
+            // But for a fresh install, this is usually not needed.
+        }
     }
 
     /**

@@ -23,13 +23,13 @@ export function AppSidebar() {
   const location = useLocation();
 
   return (
-    <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col bg-gradient-to-b from-sidebar to-[#040814] border-r border-sidebar-border/50 shadow-2xl text-sidebar-foreground">
+    <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col bg-sidebar border-r border-sidebar-border shadow-lg text-sidebar-foreground">
       <div className="flex h-16 items-center gap-3 border-b border-sidebar-border/50 px-6 backdrop-blur-sm">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/20 border border-primary/30 shadow-[0_0_15px_rgba(var(--primary),0.2)]">
-          <ShieldCheck className="h-5 w-5 text-primary drop-shadow-[0_0_5px_rgba(var(--primary),0.8)]" />
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 border border-primary/20">
+          <ShieldCheck className="h-5 w-5 text-primary" />
         </div>
         <div>
-          <h1 className="text-sm font-bold tracking-tight text-white">OFPPT Verify</h1>
+          <h1 className="text-sm font-bold tracking-tight text-foreground">OFPPT Verify</h1>
           <p className="text-[10px] text-muted-foreground font-medium tracking-wide">Vérification de Documents</p>
         </div>
       </div>
@@ -45,7 +45,7 @@ export function AppSidebar() {
                 "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-300 relative overflow-hidden",
                 isActive
                   ? "bg-primary/10 text-primary shadow-[inset_3px_0_0_0_hsl(var(--primary))]"
-                  : "text-sidebar-foreground/60 hover:bg-white/5 hover:text-white"
+                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
               )}
             >
               {isActive && (
@@ -53,7 +53,7 @@ export function AppSidebar() {
               )}
               <item.icon className={cn(
                 "h-4 w-4 transition-transform duration-300 relative z-10", 
-                isActive ? "scale-110 drop-shadow-[0_0_8px_hsl(var(--primary))]" : "group-hover:scale-110"
+                isActive ? "scale-110 text-primary" : "group-hover:scale-110"
               )} />
               <span className="relative z-10 tracking-wide">{item.label}</span>
             </NavLink>

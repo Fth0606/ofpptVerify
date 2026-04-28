@@ -76,8 +76,6 @@ const ImportExcel = () => {
           NTelephone: getValue(["NTelephone", "ntelephone"]),
           Nationalite: getValue(["Nationalite", "nationalite"]),
           anneeEtude: getValue(["anneeEtude", "anneeetude"]),
-          Nom_Arabe: getValue(["Nom_Arabe", "nom_arabe"]),
-          Prenom_arabe: getValue(["Prenom_arabe", "prenom_arabe"]),
           NiveauScolaire: getValue(["NiveauScolaire", "niveauscolaire"]),
         };
       });
@@ -106,8 +104,6 @@ const ImportExcel = () => {
     { name: "NTelephone",        example: "0719982950",    required: false, description: "Numéro de téléphone" },
     { name: "Nationalite",       example: "Marocain",      required: false, description: "Nationalité" },
     { name: "anneeEtude",        example: "2ème année",    required: false, description: "Année d'étude" },
-    { name: "Nom_Arabe",         example: "علوي",           required: false, description: "Nom de famille (Arabe)" },
-    { name: "Prenom_arabe",      example: "فتيحة",          required: false, description: "Prénom (Arabe)" },
     { name: "NiveauScolaire",    example: "Baccalauréat",  required: false, description: "Niveau scolaire" },
   ];
 

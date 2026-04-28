@@ -171,8 +171,6 @@ const StudentDetail = () => {
             {[
               ["Nom (Français)", student.Nom || "-"],
               ["Prénom (Français)", student.Prenom || "-"],
-              ["Nom (Arabe)", student.Nom_Arabe || "-"],
-              ["Prénom (Arabe)", student.Prenom_arabe || "-"],
               ["Date de Naissance", student.DateNaissance],
               ["CIN", student.cin],
               ["Nationalité", student.Nationalite],
@@ -270,9 +268,9 @@ const StudentDetail = () => {
                           <div className="p-1.5 rounded bg-white border text-[11px]">
                             <span className="text-gray-400">Nom : </span>
                             <span className="font-medium text-gray-700">{doc.ocr_extracted_name}</span>
-                          </div>
-                        )}
-                        {doc.ocr_extracted_dob && (
+                        </div>
+                      )}
+                      {doc.ocr_extracted_dob && (
                           <div className="p-1.5 rounded bg-white border text-[11px]">
                             <span className="text-gray-400">Date Nais. : </span>
                             <span className="font-medium text-gray-700">{doc.ocr_extracted_dob}</span>
