@@ -212,12 +212,35 @@ const StudentDetail = () => {
           <CardHeader><CardTitle className="text-base text-red-700">⚠️ Détails des Non Concordances</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             {student.mismatch_details.map((m: any, i: number) => (
-              <div key={i} className="text-sm p-2 rounded bg-red-100/50 border border-red-200">
+              <div key={i} className={`text-sm p-2 rounded border ${m.soft ? 'bg-amber-50 border-amber-200' : 'bg-red-100/50 border-red-200'}`}>
                 <span className="font-semibold">{m.field}</span> ({m.document}):&nbsp;
                 Attendu "<span className="text-blue-700">{m.excelValue}</span>",&nbsp;
                 Obtenu "<span className="text-red-700">{m.ocrValue}</span>"
               </div>
             ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Arabic Name Verification result */}
+      {(student as any).verified_arabic_name && (
+        <Card className="border-purple-200 bg-purple-50/30">
+          <CardHeader><CardTitle className="text-base text-purple-700">🎓 Nom Arabe Vérifié (Baccalauréat)</CardTitle></CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-3 rounded-lg bg-white border border-purple-100">
+                <p className="text-[10px] uppercase text-muted-foreground mb-1">Extrait du document</p>
+                <p className="font-semibold text-purple-700 text-right text-sm" dir="rtl">{(student as any).verified_arabic_name}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-white border border-blue-100">
+                <p className="text-[10px] uppercase text-muted-foreground mb-1">Base de données</p>
+                <p className="font-semibold text-blue-700 text-right text-sm" dir="rtl">
+                  {student.Nom_Arabe || student.Prenom_arabe
+                    ? `${student.Nom_Arabe || ''} ${student.Prenom_arabe || ''}`.trim()
+                    : <span className="text-gray-400 italic font-normal">غير متوفر</span>}
+                </p>
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -272,10 +295,22 @@ const StudentDetail = () => {
                             <span className="font-medium text-gray-700">{doc.ocr_extracted_name}</span>
                           </div>
                         )}
+                        {doc.ocr_extracted_arabic_name && (
+                          <div className="p-1.5 rounded bg-white border text-[11px] text-right dir-rtl">
+                            <span className="text-gray-400">Nom Arabe : </span>
+                            <span className="font-medium text-green-700">{doc.ocr_extracted_arabic_name}</span>
+                          </div>
+                        )}
                         {doc.ocr_extracted_dob && (
                           <div className="p-1.5 rounded bg-white border text-[11px]">
                             <span className="text-gray-400">Date Nais. : </span>
                             <span className="font-medium text-gray-700">{doc.ocr_extracted_dob}</span>
+                          </div>
+                        )}
+                        {doc.ocr_extracted_cne && (
+                          <div className="p-1.5 rounded bg-white border text-[11px]">
+                            <span className="text-gray-400">CNE/Massar : </span>
+                            <span className="font-medium text-gray-700">{doc.ocr_extracted_cne}</span>
                           </div>
                         )}
                         <p className="text-[10px]">{doc.original_filename} · {formatBytes(doc.file_size)}</p>

@@ -76,15 +76,16 @@ const CorrectStudents = () => {
                     Classe: {classe}
                   </h3>
                   <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>CIN</TableHead>
-                        <TableHead>Nom</TableHead>
-                        <TableHead>Prénom</TableHead>
-                        <TableHead className="text-center">Âge</TableHead>
-                        <TableHead className="text-center">Statut</TableHead>
-                      </TableRow>
-                    </TableHeader>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>CIN</TableHead>
+                            <TableHead>Nom</TableHead>
+                            <TableHead>Prénom</TableHead>
+                            <TableHead className="text-right">الاسم الكامل</TableHead>
+                            <TableHead className="text-center">Âge</TableHead>
+                            <TableHead className="text-center">Statut</TableHead>
+                          </TableRow>
+                        </TableHeader>
                     <TableBody>
                       {students.map(student => {
                         const calculateAge = (dob: string) => {
@@ -109,6 +110,11 @@ const CorrectStudents = () => {
                             <TableCell className="font-mono text-xs">{student.cin}</TableCell>
                             <TableCell className="font-medium uppercase">{student.Nom || "-"}</TableCell>
                             <TableCell className="font-medium capitalize">{student.Prenom || "-"}</TableCell>
+                            <TableCell className="text-right font-medium text-success/80" dir="rtl">
+                              {(student as any).verified_arabic_name || (student.Nom_Arabe || student.Prenom_arabe 
+                                ? `${student.Nom_Arabe || ''} ${student.Prenom_arabe || ''}`.trim() 
+                                : "-")}
+                            </TableCell>
                             <TableCell className="text-center">{calculateAge(student.DateNaissance)}</TableCell>
                             <TableCell className="text-center">
                               <Badge className="bg-success/15 text-success border-0">

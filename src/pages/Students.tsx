@@ -203,17 +203,18 @@ const Students = () => {
                   <TableHead>CIN <ArrowUpDown className="inline h-3 w-3" /></TableHead>
                   <TableHead>Nom <ArrowUpDown className="inline h-3 w-3" /></TableHead>
                   <TableHead>Prénom <ArrowUpDown className="inline h-3 w-3" /></TableHead>
+                  <TableHead>الاسم العربي</TableHead>
                   <TableHead>Filière <ArrowUpDown className="inline h-3 w-3" /></TableHead>
                   <TableHead>Niveau Scolaire <ArrowUpDown className="inline h-3 w-3" /></TableHead>
-                  <TableHead>Âge <ArrowUpDown className="inline h-3 w-3" /></TableHead>
                   <TableHead className="text-center">Docs</TableHead>
+                  <TableHead className="text-center">Statut</TableHead>
                   <TableHead className="text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8">Chargement des étudiants...</TableCell>
+                    <TableCell colSpan={9} className="text-center py-8">Chargement des étudiants...</TableCell>
                   </TableRow>
                 ) : filteredStudents.length > 0 ? (
                   filteredStudents.map((student) => {
@@ -243,9 +244,13 @@ const Students = () => {
                         <TableCell className="font-mono text-sm py-4">{student.cin}</TableCell>
                         <TableCell className="font-medium py-4 uppercase">{student.Nom || "-"}</TableCell>
                         <TableCell className="font-medium py-4 capitalize">{student.Prenom || "-"}</TableCell>
+                        <TableCell className="py-4 text-right font-medium" dir="rtl">
+                          {student.Nom_Arabe || student.Prenom_arabe
+                            ? `${student.Nom_Arabe || ''} ${student.Prenom_arabe || ''}`.trim()
+                            : <span className="text-muted-foreground">-</span>}
+                        </TableCell>
                         <TableCell className="py-4">{student.LibelleLong || "-"}</TableCell>
                         <TableCell className="py-4 font-mono text-sm">{student.NiveauScolaire || "-"}</TableCell>
-                        <TableCell className="py-4">{calculateAge(student.DateNaissance)}</TableCell>
                         <TableCell className="text-center py-4">
                           {(() => {
                             // documents_count is returned by withCount('documents') on the backend
@@ -273,6 +278,9 @@ const Students = () => {
                               );
                             }
                           })()}
+                        </TableCell>
+                        <TableCell className="text-center py-4">
+                          {getStatusBadge(student.status)}
                         </TableCell>
                         <TableCell className="text-center py-4" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-center gap-2">
@@ -304,7 +312,7 @@ const Students = () => {
                   })
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                       Aucun étudiant ne correspond à vos critères
                     </TableCell>
                   </TableRow>
@@ -337,14 +345,14 @@ const Students = () => {
                 const dbMismatches = student?.mismatch_details || [];
                 
                 return (
-                  <div key={idx} className={`rounded-xl border-2 p-5 ${isCorrect ? "bg-green-50/30 border-green-100" : "bg-red-50/30 border-red-100"}`}>
+                  <div key={idx} className={`rounded-xl border-2 p-5 mb-4 ${isCorrect ? "bg-emerald-500/5 border-emerald-500/20 shadow-sm" : "bg-rose-500/5 border-rose-500/20 shadow-md"}`}>
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-full ${isCorrect ? "bg-green-100 text-green-600" : "bg-red-100 text-red-600"}`}>
+                        <div className={`p-2 rounded-full ${isCorrect ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400" : "bg-rose-100 text-rose-600 dark:bg-rose-500/20 dark:text-rose-400"}`}>
                           {isCorrect ? <CheckCircle2 className="h-5 w-5" /> : <AlertCircle className="h-5 w-5" />}
                         </div>
                         <div>
-                          <p className="font-bold text-lg leading-none mb-1">CIN: {res.cin}</p>
+                          <p className="font-bold text-lg leading-none mb-1 text-foreground">CIN: {res.cin}</p>
                           <p className="text-sm text-muted-foreground">{res.folder}</p>
                         </div>
                       </div>
@@ -353,29 +361,60 @@ const Students = () => {
                       </Badge>
                     </div>
 
+                    {/* Name comparison: OCR extracted vs Database record */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                      <div className="p-3 rounded-lg bg-white border border-gray-100 shadow-sm">
-                        <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Extrait des Documents :</p>
-                        <p className={`font-semibold ${isCorrect ? "text-green-700" : "text-amber-700"}`}>
-                          {res.verified_name || "Échec de l'extraction du nom"}
-                        </p>
+                      {/* OCR Extracted */}
+                      <div className="p-3 rounded-lg bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-700 shadow-sm">
+                        <p className="text-[10px] uppercase font-bold text-muted-foreground mb-2">📄 Extrait des Documents (OCR) :</p>
+                        <div className="space-y-1.5">
+                          {/* French name from CIN */}
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] text-gray-400 shrink-0">FR :</span>
+                            <span className={`text-sm font-semibold ${res.verified_name ? (isCorrect ? "text-green-700" : "text-amber-700") : "text-red-400 italic"}`}>
+                              {res.verified_name || "Nom non extrait"}
+                            </span>
+                          </div>
+                          {/* Arabic name from BAC */}
+                          <div className="flex items-center gap-1.5" dir="rtl">
+                            <span className="text-[10px] text-gray-400 shrink-0">عر :</span>
+                            <span className={`text-sm font-semibold ${res.verified_arabic_name ? (isCorrect ? "text-green-700" : "text-amber-700") : "text-red-400 italic"}`}>
+                              {res.verified_arabic_name || "الاسم غير مستخرج"}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="p-3 rounded-lg bg-white border border-gray-100 shadow-sm">
-                        <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Enregistrement Base de données :</p>
-                        <p className="font-semibold text-blue-700">{student ? `${student.Nom} ${student.Prenom}` : "Introuvable"}</p>
+                      {/* Database Record */}
+                      <div className="p-3 rounded-lg bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-700 shadow-sm">
+                        <p className="text-[10px] uppercase font-bold text-muted-foreground mb-2">🗄️ Enregistrement Base de données :</p>
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] text-gray-400 shrink-0">FR :</span>
+                            <span className="text-sm font-semibold text-blue-600 dark:text-blue-400">
+                              {student ? `${student.Nom} ${student.Prenom}` : "Introuvable"}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5" dir="rtl">
+                            <span className="text-[10px] text-gray-400 shrink-0">عر :</span>
+                            <span className="text-sm font-semibold text-blue-700 dark:text-blue-300">
+                              {student?.Nom_Arabe || student?.Prenom_arabe
+                                ? `${student?.Nom_Arabe || ''} ${student?.Prenom_arabe || ''}`.trim()
+                                : <span className="text-gray-400 italic font-normal">غير متوفر</span>}
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
-                    {!isCorrect && (
-                      <div className="mb-4 p-4 rounded-lg bg-red-100/50 border border-red-200">
-                        <p className="text-xs font-bold text-red-800 mb-2 flex items-center gap-2">
-                          <AlertCircle className="h-3 w-3" /> Détails des Non Concordances / Erreurs :
+                    {(res.errors && res.errors.length > 0 || dbMismatches.length > 0) && (
+                      <div className={`mb-4 p-4 rounded-lg border ${isCorrect ? "bg-amber-500/10 border-amber-500/20" : "bg-rose-500/10 border-rose-500/20"}`}>
+                        <p className={`text-xs font-bold mb-2 flex items-center gap-2 ${isCorrect ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400"}`}>
+                          <AlertCircle className="h-3 w-3" /> {isCorrect ? "Avertissements / Remarques :" : "Détails des Non Concordances / Erreurs :"}
                         </p>
                         <ul className="space-y-1">
                           {/* Prefer DB mismatches if available, fallback to OCR errors */}
                           {dbMismatches.length > 0 ? (
                             dbMismatches.map((m: any, i: number) => (
-                              <li key={i} className="text-xs text-red-700 flex items-start gap-2">
+                              <li key={i} className={`text-xs flex items-start gap-2 ${m.soft ? "text-amber-700" : "text-red-700"}`}>
                                 <span className="shrink-0">•</span>
                                 <span>
                                   <strong>{m.field}</strong> ({m.document}): 
@@ -385,7 +424,7 @@ const Students = () => {
                             ))
                           ) : (
                             res.errors && res.errors.map((err: any, i: number) => (
-                              <li key={i} className="text-xs text-red-700 flex items-start gap-2">
+                              <li key={i} className={`text-xs flex items-start gap-2 ${err.soft ? "text-amber-700" : "text-red-700"}`}>
                                 <span className="shrink-0">•</span>
                                 <span><strong>{err.file}</strong>: {err.error}</span>
                               </li>
@@ -398,21 +437,50 @@ const Students = () => {
                     <div>
                       <p className="text-[10px] uppercase font-bold text-muted-foreground mb-2">Extractions de Documents :</p>
                       <div className="flex flex-wrap gap-3">
-                        {res.file_details && res.file_details.map((detail: any, i: number) => (
-                          <div key={i} className="flex-1 min-w-[200px] p-3 rounded-lg bg-white/50 border border-gray-100">
-                            <p className="text-[10px] font-bold truncate mb-1" title={detail.file}>{detail.file}</p>
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-xs text-muted-foreground truncate">
-                                {detail.extracted_name || detail.extracted_cie || "Aucune donnée extraite"}
-                              </span>
-                              {detail.extracted_dob && (
-                                <Badge variant="outline" className="text-[10px] font-normal py-0">
-                                  {detail.extracted_dob}
-                                </Badge>
-                              )}
+                        {res.file_details && res.file_details.map((detail: any, i: number) => {
+                          const isBacFile = detail.file.toLowerCase().includes('baccalaureate');
+                          return (
+                            <div key={i} className={`flex-1 min-w-[220px] p-3 rounded-lg border ${
+                              isBacFile 
+                                ? 'bg-purple-50/50 dark:bg-purple-950/20 border-purple-200 dark:border-purple-800' 
+                                : 'bg-white/50 dark:bg-gray-900/50 border-gray-100 dark:border-gray-700'
+                            }`}>
+                              <p className="text-[10px] font-bold truncate mb-2 flex items-center gap-1" title={detail.file}>
+                                <span>{isBacFile ? '🎓' : '🪪'}</span>
+                                <span className="truncate">{detail.file}</span>
+                              </p>
+                              <div className="space-y-1">
+                                {detail.extracted_name && (
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[10px] text-gray-400 shrink-0">Nom :</span>
+                                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">{detail.extracted_name}</span>
+                                  </div>
+                                )}
+                                {detail.extracted_arabic_name && (
+                                  <div className="flex items-center gap-1.5" dir="rtl">
+                                    <span className="text-[10px] text-gray-400 shrink-0">الاسم :</span>
+                                    <span className="text-xs font-semibold text-purple-700 dark:text-purple-400 truncate">{detail.extracted_arabic_name}</span>
+                                  </div>
+                                )}
+                                {detail.extracted_cne && (
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[10px] text-gray-400 shrink-0">CNE :</span>
+                                    <span className="text-xs font-mono text-gray-700 dark:text-gray-300">{detail.extracted_cne}</span>
+                                  </div>
+                                )}
+                                {detail.extracted_dob && (
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[10px] text-gray-400 shrink-0">D.Nais :</span>
+                                    <Badge variant="outline" className="text-[10px] font-normal py-0">{detail.extracted_dob}</Badge>
+                                  </div>
+                                )}
+                                {!detail.extracted_name && !detail.extracted_arabic_name && !detail.extracted_cne && (
+                                  <span className="text-xs text-red-400 italic">Aucune donnée extraite</span>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   </div>

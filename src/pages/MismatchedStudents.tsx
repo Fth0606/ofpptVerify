@@ -92,18 +92,17 @@ const MismatchedStudents = () => {
                     Classe: {classe}
                   </h3>
                   <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Nom Complet</TableHead>
-                        <TableHead>CIN</TableHead>
-                        <TableHead>Date de Naissance</TableHead>
-                        <TableHead>Lieu de Naissance</TableHead>
-                        <TableHead>Groupe</TableHead>
-                        <TableHead>Bac</TableHead>
-                        <TableHead>Problèmes</TableHead>
-                        <TableHead></TableHead>
-                      </TableRow>
-                    </TableHeader>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Nom Complet</TableHead>
+                            <TableHead className="text-right">الاسم الكامل</TableHead>
+                            <TableHead>CIN</TableHead>
+                            <TableHead>Date de Naissance</TableHead>
+                            <TableHead>Groupe</TableHead>
+                            <TableHead>Problèmes</TableHead>
+                            <TableHead></TableHead>
+                          </TableRow>
+                        </TableHeader>
                     <TableBody>
                       {students.map(student => {
                         const mm = getMismatches(student);
@@ -116,11 +115,14 @@ const MismatchedStudents = () => {
                               onClick={() => setExpandedStudent(isExpanded ? null : student.id)}
                             >
                               <TableCell className="font-medium">{student.Nom} {student.Prenom}</TableCell>
-                              <TableCell>{student.cin}</TableCell>
-                              <TableCell>{student.DateNaissance}</TableCell>
-                              <TableCell>{student.Nationalite || "-"}</TableCell>
-                              <TableCell>{student.CodeDiplome}</TableCell>
-                              <TableCell className="text-xs">{student.NiveauScolaire || "-"}</TableCell>
+                              <TableCell className="text-right font-medium text-warning/80" dir="rtl">
+                                {(student as any).verified_arabic_name || (student.Nom_Arabe || student.Prenom_arabe 
+                                  ? `${student.Nom_Arabe || ''} ${student.Prenom_arabe || ''}`.trim() 
+                                  : "-")}
+                              </TableCell>
+                              <TableCell className="font-mono text-xs">{student.cin}</TableCell>
+                              <TableCell className="text-xs">{student.DateNaissance}</TableCell>
+                              <TableCell className="text-xs">{student.CodeDiplome}</TableCell>
                               <TableCell>
                                 <Badge className="bg-warning/15 text-warning border-0">
                                   {mm ? mm.mismatches.length : "?"} problème{mm && mm.mismatches.length > 1 ? "s" : ""}
@@ -132,7 +134,7 @@ const MismatchedStudents = () => {
                             </TableRow>
                             {isExpanded && mm && (
                               <TableRow key={`${student.id}-detail`}>
-                                <TableCell colSpan={8} className="bg-destructive/5 p-4">
+                                <TableCell colSpan={7} className="bg-destructive/5 p-4">
                                   <div className="space-y-2">
                                     <p className="text-sm font-semibold text-destructive">Détails des Non Concordances :</p>
                                     {mm.mismatches.map((m: any, i: number) => (

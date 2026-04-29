@@ -196,11 +196,11 @@ const UploadDocuments = () => {
           </CardHeader>
           <CardContent className="space-y-4">
             {results.map((res, idx) => (
-              <div key={idx} className={`rounded-lg border p-4 ${res.is_correct ? "bg-green-50/50 border-green-200" : "bg-red-50/50 border-red-200"}`}>
+              <div key={idx} className={`rounded-lg border p-4 mb-4 ${res.is_correct ? "bg-emerald-500/5 border-emerald-500/20 shadow-sm" : "bg-rose-500/5 border-rose-500/20 shadow-md"}`}>
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    {res.is_correct ? <CheckCircle2 className="h-5 w-5 text-green-600" /> : <AlertCircle className="h-5 w-5 text-red-600" />}
-                    <span className="font-bold">CIN: {res.cin}</span>
+                    {res.is_correct ? <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" /> : <AlertCircle className="h-5 w-5 text-rose-600 dark:text-rose-400" />}
+                    <span className="font-bold text-foreground">CIN: {res.cin}</span>
                   </div>
                   <Badge variant={res.is_correct ? "success" : "destructive"}>
                     {res.is_correct ? "Lié à l'étudiant" : "Introuvable"}
@@ -223,13 +223,13 @@ const UploadDocuments = () => {
                 </div>
 
                 {res.db_mismatch && (
-                  <p className="text-xs text-red-600 font-bold mb-2 flex items-center gap-1">
+                  <p className="text-xs text-rose-600 dark:text-rose-400 font-bold mb-2 flex items-center gap-1">
                     <FileWarning className="h-3 w-3" /> Non concordance : Le nom sur le document ne correspond pas à l'enregistrement
                   </p>
                 )}
 
                 {!res.student_name && (
-                  <p className="text-xs text-amber-600 font-bold mb-2 flex items-center gap-1">
+                  <p className="text-xs text-amber-600 dark:text-amber-400 font-bold mb-2 flex items-center gap-1">
                     <AlertCircle className="h-3 w-3" /> Avertissement : Aucun étudiant trouvé avec le CIN {res.cin}
                   </p>
                 )}

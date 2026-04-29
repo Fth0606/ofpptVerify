@@ -14,8 +14,10 @@ export interface StudentDocument {
   mime_type: string;
   file_size: number;
   ocr_extracted_name: string | null;
+  ocr_extracted_arabic_name: string | null;
   ocr_extracted_dob: string | null;
   ocr_extracted_cin: string | null;
+  ocr_extracted_cne: string | null;
   ocr_status: "pending" | "processed" | "failed";
   created_at: string;
 }
@@ -41,6 +43,7 @@ export interface Student {
   documents_count?: number;
   mismatch_details?: any[];
   documents_list?: StudentDocument[];
+  verified_arabic_name?: string | null;
 }
 
 // ─────────────────────────────────────────────────────────

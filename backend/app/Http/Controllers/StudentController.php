@@ -27,7 +27,7 @@ class StudentController extends Controller
         }
         // Include document metadata (no file_data blob)
         $student->documents_list = $student->documents()
-            ->select('id', 'student_id', 'type', 'original_filename', 'mime_type', 'file_size', 'ocr_extracted_name', 'ocr_extracted_dob', 'ocr_extracted_cin', 'ocr_status', 'created_at')
+            ->select('id', 'student_id', 'type', 'original_filename', 'mime_type', 'file_size', 'ocr_extracted_name', 'ocr_extracted_arabic_name', 'ocr_extracted_dob', 'ocr_extracted_cin', 'ocr_extracted_cne', 'ocr_status', 'created_at')
             ->get();
         return $student;
     }
@@ -159,7 +159,7 @@ class StudentController extends Controller
             return response()->json(['message' => 'Student not found'], 404);
         }
         $docs = $student->documents()
-            ->select('id', 'student_id', 'type', 'original_filename', 'mime_type', 'file_size', 'ocr_extracted_name', 'ocr_extracted_dob', 'ocr_extracted_cin', 'ocr_status', 'created_at')
+            ->select('id', 'student_id', 'type', 'original_filename', 'mime_type', 'file_size', 'ocr_extracted_name', 'ocr_extracted_arabic_name', 'ocr_extracted_dob', 'ocr_extracted_cin', 'ocr_extracted_cne', 'ocr_status', 'created_at')
             ->get();
         return response()->json($docs);
     }
@@ -392,21 +392,26 @@ class StudentController extends Controller
         $expectedData = [];
         foreach ($studentsWithDocs as $student) {
             $expectedData[$student->cin] = [
-                'fullName'    => trim($student->Nom . ' ' . $student->Prenom),
-                'dateOfBirth' => $student->DateNaissance,
-                'cin'         => $student->cin,
-                'cne'         => $student->MatriculeEtudiant
+                'fullName'       => trim($student->Nom . ' ' . $student->Prenom),
+                'fullNameArabic' => trim(($student->Nom_Arabe ?? '') . ' ' . ($student->Prenom_arabe ?? '')),
+                'dateOfBirth'    => $student->DateNaissance,
+                'cin'            => $student->cin,
+                'student_id'     => $student->MatriculeEtudiant
             ];
         }
 
         try {
             $ocrUrl   = env('OCR_SERVICE_URL', 'http://localhost:5001');
+            \Illuminate\Support\Facades\Log::info("Sending group verification request to OCR service: " . $ocrUrl . " for group: " . $groupName);
+            
             $response = Http::timeout(3600)
                 ->attach('file', file_get_contents($zipPath), 'verify.zip')
                 ->post($ocrUrl . '/validate', [
                     'expected_data' => json_encode($expectedData)
                 ]);
 
+            \Illuminate\Support\Facades\Log::info("OCR Service response status: " . $response->status());
+            
             unlink($zipPath);
 
 
@@ -417,52 +422,56 @@ class StudentController extends Controller
                     $student = Student::where('cin', $res['cin'])->first();
                     if (!$student) continue;
 
-                    $mismatches  = [];
-                    $verifiedName = $res['verified_name'] ?? null;
-                    $verifiedDob  = $res['verified_dob']  ?? null;
-                    $isCorrect    = $res['is_correct']    ?? true;
+                    $mismatches       = [];
+                    $verifiedName     = $res['verified_name']         ?? null;
+                    $verifiedArabicName = $res['verified_arabic_name'] ?? null;
+                    $verifiedDob      = $res['verified_dob']           ?? null;
+                    $isCorrect        = $res['is_correct']             ?? true;
 
                     if (isset($res['errors'])) {
                         foreach ($res['errors'] as $error) {
                             $mismatches[] = [
                                 'document'   => $error['file'],
-                                'field'      => 'OCR Error',
-                                'excelValue' => 'Valid document',
+                                'field'      => isset($error['soft']) && $error['soft'] ? 'Avertissement OCR' : 'Erreur OCR',
+                                'excelValue' => 'Document valide',
                                 'ocrValue'   => $error['error'],
+                                'soft'       => $error['soft'] ?? false,
                             ];
                         }
                     }
 
-                    // We now strictly trust the OCR backend for correctness because it does supervised validation!
+                    // Trust the OCR backend — it performs supervised validation
                     if (!$isCorrect && empty($mismatches)) {
                         $mismatches[] = [
                             'document'   => 'Verification Failure',
-                            'field'      => 'General OCR',
-                            'excelValue' => 'Expected matches',
-                            'ocrValue'   => 'Mismatch detected in document data',
+                            'field'      => 'OCR Général',
+                            'excelValue' => 'Correspondances attendues',
+                            'ocrValue'   => 'Incohérence détectée dans les données du document',
                         ];
                     }
 
-                    // Update OCR results back to the individual documents
+                    // Persist OCR results back to individual document rows
                     if (isset($res['file_details'])) {
                         foreach ($res['file_details'] as $detail) {
-                            // Match by type encoded in filename: cin_ID.ext
+                            // Filename pattern: {type}_{id}.{ext}  (built in verifyGroup)
                             if (preg_match('/^(\w+)_(\d+)\./', $detail['file'], $m)) {
-                                $docType = $m[1];
-                                $docId   = $m[2];
+                                $docId = $m[2];
                                 Document::where('id', $docId)->update([
-                                    'ocr_extracted_name' => $detail['extracted_name'],
-                                    'ocr_extracted_dob'  => $detail['extracted_dob'],
-                                    'ocr_extracted_cin'  => $detail['extracted_cin'] ?? $detail['extracted_cne'] ?? null,
-                                    'ocr_status'         => 'processed',
+                                    'ocr_extracted_name'        => $detail['extracted_name']         ?? null,
+                                    'ocr_extracted_arabic_name' => $detail['extracted_arabic_name']  ?? null,
+                                    'ocr_extracted_dob'         => $detail['extracted_dob']           ?? null,
+                                    'ocr_extracted_cin'         => $detail['extracted_cin']           ?? null,
+                                    'ocr_extracted_cne'         => $detail['extracted_cne']           ?? null,
+                                    'ocr_status'                => 'processed',
                                 ]);
                             }
                         }
                     }
 
                     $student->update([
-                        'status'           => $isCorrect ? 'verified' : 'mismatch',
-                        'mismatch_details' => $mismatches,
+                        'status'               => $isCorrect ? 'verified' : 'mismatch',
+                        'mismatch_details'     => $mismatches,
+                        'verified_arabic_name' => $verifiedArabicName,
                     ]);
                 }
 

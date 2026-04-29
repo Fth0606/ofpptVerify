@@ -223,11 +223,18 @@ const Dashboard = () => {
               ) : recentActivity.length > 0 ? (
                 recentActivity.map((activity, i) => (
                   <div key={i} className="flex items-center justify-between border-b pb-3 last:border-0 last:pb-0">
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium">{activity.student}</p>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium truncate">{activity.student}</p>
+                        {(students.find(s => s.cin === activity.cin) as any)?.verified_arabic_name && (
+                          <span className="text-xs text-success/70 font-medium" dir="rtl">
+                            {(students.find(s => s.cin === activity.cin) as any).verified_arabic_name}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-muted-foreground">{activity.cin} — {activity.time}</p>
                     </div>
-                    <Badge variant={activity.status === "verified" ? "success" : activity.status === "mismatch" ? "destructive" : "secondary"}>
+                    <Badge variant={activity.status === "verified" ? "success" : activity.status === "mismatch" ? "destructive" : "secondary"} className="shrink-0 ml-2">
                       {activity.status === "verified" ? "Vérifié" : activity.status === "mismatch" ? "Non Concordant" : activity.status}
                     </Badge>
                   </div>
