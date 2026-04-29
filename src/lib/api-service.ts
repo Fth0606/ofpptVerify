@@ -16,6 +16,7 @@ export interface StudentDocument {
   ocr_extracted_name: string | null;
   ocr_extracted_dob: string | null;
   ocr_extracted_cin: string | null;
+  ocr_extracted_arabic: string | null;
   ocr_status: "pending" | "processed" | "failed";
   created_at: string;
 }

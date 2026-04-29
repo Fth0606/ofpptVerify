@@ -27,7 +27,7 @@ class StudentController extends Controller
         }
         // Include document metadata (no file_data blob)
         $student->documents_list = $student->documents()
-            ->select('id', 'student_id', 'type', 'original_filename', 'mime_type', 'file_size', 'ocr_extracted_name', 'ocr_extracted_dob', 'ocr_extracted_cin', 'ocr_status', 'created_at')
+            ->select('id', 'student_id', 'type', 'original_filename', 'mime_type', 'file_size', 'ocr_extracted_name', 'ocr_extracted_dob', 'ocr_extracted_cin', 'ocr_extracted_arabic', 'ocr_status', 'created_at')
             ->get();
         return $student;
     }
@@ -155,7 +155,7 @@ class StudentController extends Controller
             return response()->json(['message' => 'Student not found'], 404);
         }
         $docs = $student->documents()
-            ->select('id', 'student_id', 'type', 'original_filename', 'mime_type', 'file_size', 'ocr_extracted_name', 'ocr_extracted_dob', 'ocr_extracted_cin', 'ocr_status', 'created_at')
+            ->select('id', 'student_id', 'type', 'original_filename', 'mime_type', 'file_size', 'ocr_extracted_name', 'ocr_extracted_dob', 'ocr_extracted_cin', 'ocr_extracted_arabic', 'ocr_status', 'created_at')
             ->get();
         return response()->json($docs);
     }
@@ -247,7 +247,7 @@ class StudentController extends Controller
             // Ignore if no SUPER privilege
         }
 
-        $request->validate(['file' => 'required|file|mimes:zip|max:122880']);
+        $request->validate(['file' => 'required|file|mimes:zip|max:512000']);
 
         $zipFile  = $request->file('file');
         $zip      = new ZipArchive;
@@ -450,6 +450,7 @@ class StudentController extends Controller
                                     'ocr_extracted_name'   => $detail['extracted_name'],
                                     'ocr_extracted_dob'    => $detail['extracted_dob'],
                                     'ocr_extracted_cin'    => $detail['extracted_cin'] ?? $detail['extracted_cne'] ?? null,
+                                    'ocr_extracted_arabic' => $detail['extracted_arabic_name'] ?? null,
                                     'ocr_status'           => 'processed',
                                 ]);
                             }

@@ -268,8 +268,14 @@ const StudentDetail = () => {
                           <div className="p-1.5 rounded bg-white border text-[11px]">
                             <span className="text-gray-400">Nom : </span>
                             <span className="font-medium text-gray-700">{doc.ocr_extracted_name}</span>
-                        </div>
-                      )}
+                          </div>
+                        )}
+                        {doc.ocr_extracted_arabic && (
+                          <div className="p-1.5 rounded bg-white border text-[11px] flex justify-between items-center">
+                            <span className="text-gray-400">Nom Arabe : </span>
+                            <span className="font-bold text-green-700 text-sm" dir="rtl">{doc.ocr_extracted_arabic}</span>
+                          </div>
+                        )}
                       {doc.ocr_extracted_dob && (
                           <div className="p-1.5 rounded bg-white border text-[11px]">
                             <span className="text-gray-400">Date Nais. : </span>

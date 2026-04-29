@@ -21,20 +21,26 @@ from difflib import SequenceMatcher
 
 # Load OCR models
 try:
-    # Use ['fr', 'en'] for reliable French/Latin extraction as default
+    # Separate readers because Arabic is only compatible with English in EasyOCR
     reader_easyocr = easyocr.Reader(['fr', 'en'], gpu=False)
+    reader_easyocr_ar = easyocr.Reader(['ar', 'en'], gpu=False)
 except Exception as e:
     print(f"Error loading EasyOCR: {e}")
     reader_easyocr = None
+    reader_easyocr_ar = None
 
 try:
     if PaddleOCR:
         reader_paddle = PaddleOCR(use_angle_cls=True, lang='fr')
+        # New Arabic reader for baccalaureate documents
+        reader_paddle_ar = PaddleOCR(use_angle_cls=True, lang='arabic')
     else:
         reader_paddle = None
+        reader_paddle_ar = None
 except Exception as e:
     print(f"Error loading PaddleOCR: {e}")
     reader_paddle = None
+    reader_paddle_ar = None
 
 
 # Birth date regexes
@@ -350,6 +356,140 @@ def preprocess_image(image_path, is_bac=False):
     return temp_path
 
 
+def extract_arabic_name(ocr_text, ocr_blocks=None, expected_name=None):
+    """
+    Extract a likely Arabic full name from OCR text.
+    This is used only for baccalaureate documents.
+    """
+    if not ocr_text:
+        return None
+
+    # Common OCR misreadings of "المترشح" / "المترشحة"
+    label_patterns = [
+        r"المتر[شحخمج][ة]?", 
+        r"[اأ]?ن\s*المتر[شحخمج][ة]?",
+        r"[اأ]?ن\s*[اأ]ل\s*م\s*ت\s*ر\s*[شحخمج]\s*[ة]?",
+        r"المترثم",
+        r"انالمترثم",
+        r"ان\s*المترشم"
+    ]
+    label_regex = re.compile("|".join(label_patterns))
+
+    # 1. Targeted Strategy: Look for name after label or nearby
+    if ocr_blocks:
+        # Strategy A: Near the "Candidate" label
+        for i, (box, text) in enumerate(ocr_blocks):
+            if label_regex.search(text):
+                # Check same block after the label
+                # Find the matched label in text
+                match = label_regex.search(text)
+                after_label = text[match.end():].strip()
+                # Clean non-Arabic
+                after_label = re.sub(r"[^\u0600-\u06FF\s]", " ", after_label).strip()
+                if len(after_label.split()) >= 2:
+                    return after_label
+                
+                # Check next 3 blocks (sometimes the label is separate)
+                for j in range(i + 1, min(i + 4, len(ocr_blocks))):
+                    next_text = ocr_blocks[j][1]
+                    cleaned_next = re.sub(r"[^\u0600-\u06FF\s]", " ", next_text).strip()
+                    words = cleaned_next.split()
+                    if len(words) >= 2 and len(words) <= 5:
+                        # Ensure not another administrative label
+                        stop_words_small = {"وزارة", "الأكاديمية", "الجهة", "نيابة", "مركز", "دورة", "المملكة", "المغربية"}
+                        if not any(sw in cleaned_next for sw in stop_words_small):
+                            return cleaned_next
+
+        # Strategy B: On the same line as the French name (if provided)
+        if expected_name:
+            expected_clean = clean_string_for_match(expected_name)
+            french_block_idx = -1
+            french_box = None
+            
+            # Find the block containing the French name
+            for i, (box, text) in enumerate(ocr_blocks):
+                if expected_clean in clean_string_for_match(text):
+                    french_block_idx = i
+                    french_box = box
+                    break
+            
+            if french_box:
+                # french_box format: [[x1,y1], [x2,y1], [x2,y2], [x1,y2]]
+                y_mid = (french_box[0][1] + french_box[2][1]) / 2
+                height = abs(french_box[2][1] - french_box[0][1])
+                
+                # Look for Arabic blocks that are at a similar Y level
+                line_candidates = []
+                for i, (box, text) in enumerate(ocr_blocks):
+                    if i == french_block_idx: continue
+                    
+                    this_y_mid = (box[0][1] + box[2][1]) / 2
+                    # If within 70% of the height of the french block vertically
+                    if abs(this_y_mid - y_mid) < height * 0.7:
+                        # Extract Arabic only
+                        arabic_only = re.sub(r"[^\u0600-\u06FF\s]", " ", text).strip()
+                        words = arabic_only.split()
+                        if len(words) >= 2 and len(words) <= 5:
+                            line_candidates.append(arabic_only)
+                
+                if line_candidates:
+                    # Return the longest or most likely name candidate on the same line
+                    return max(line_candidates, key=len)
+
+    # 2. Fallback: Existing heuristic-based extraction
+    normalized = re.sub(r"[^\u0600-\u06FF\s]", " ", ocr_text)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    if not normalized:
+        return None
+
+    # Typical non-name Arabic labels seen on bac documents and administrative headers.
+    stop_words = [
+        "الاسم", "الشخصي", "العائلي", "الكامل", "رقم", "البطاقة",
+        "الوطنية", "ازدياد", "تاريخ", "الميلاد", "السنة", "الدراسية",
+        "شهادة", "البكالوريا", "المترشح", "المترشحة", "الامتحان",
+        "وزارة", "التربية", "والتكوين", "للتربية", "والرياضة", "والتعليم", "الوطنية", "الدراسية",
+        "الأكاديمية", "الأولي", "الجهوية", "للتكوين", "المهني", "المملكة", "المغربية", "بأن", "يشهد",
+        "تكوين", "أكاديمية", "نيابة", "عمالة", "إقليم", "مركز", "دورة", "مسلك",
+        "ميزة", "معدل", "عام", "خاص", "تقني", "متخصص", "عالي", "جامعة", "كلية",
+        "معهد", "مدرسة", "الرباط", "سلا", "القنيطرة", "الدار", "البيضاء", "فاس",
+        "مكناس", "مراكش", "آسفي", "طنجة", "تطوان", "الحسيمة", "وجدة", "أكادير",
+        "بني", "ملال", "خنيفرة", "درعة", "تافيلالت", "سوس", "ماسة", "كلميم",
+        "واد", "نون", "العيون", "الساقية", "الحمراء", "الداخلة", "الذهب",
+        "مدير", "رئيس", "توقيع", "خاتم", "حرر", "بتاريخ", "قرارلجنة", "المداولات", "المتعلقة", "للتعريف", "بمؤسسة"
+    ]
+
+    # Candidate chunks with 2..5 Arabic words (typical full name length).
+    candidates = []
+    for chunk in re.findall(r"[\u0600-\u06FF]+(?:\s+[\u0600-\u06FF]+){1,4}", normalized):
+        words = chunk.split()
+        
+        # Robust check: if any word in the chunk contains or is a stop word
+        is_stop = False
+        for w in words:
+            for sw in stop_words:
+                if sw in w: # Substring match for robustness
+                    is_stop = True
+                    break
+            if is_stop: break
+            
+        if is_stop:
+            continue
+            
+        # Ignore tiny words-only chunks unlikely to be a name.
+        if len("".join(words)) < 5:
+            continue
+        candidates.append(" ".join(words))
+
+    print(f"DEBUG: Found {len(candidates)} Arabic name candidates: {candidates}")
+
+    if not candidates:
+        return None
+
+    # Prefer 2-word names first (common in your example), then 3 words, then longest.
+    candidates.sort(key=lambda c: (abs(len(c.split()) - 2), -len(c)))
+    return candidates[0]
+
+
 def process_image(image_path, expected_name=None, expected_cin=None, expected_cne=None, is_bac=False):
     processed_path = None
     try:
@@ -359,18 +499,41 @@ def process_image(image_path, expected_name=None, expected_cin=None, expected_cn
         ocr_blocks = []
         
         # Try OCR on normal image
-        def run_ocr(img_path):
+        def run_ocr(img_path, is_bac=False):
             blocks = []
             
-            if reader_paddle: # Paddle is set to 'fr'
+            # 1. Run French/Latin OCR (Paddle)
+            if reader_paddle:
                 try:
                     result = reader_paddle.ocr(img_path)
                     if result and result[0]:
                         for line in result[0]:
                             blocks.append((line[0], line[1][0]))
                 except Exception as e:
-                    print(f"PaddleOCR error: {e}")
+                    print(f"PaddleOCR (FR) error: {e}")
+            
+            # 2. Run Arabic OCR (Paddle) ONLY if it's a baccalaureate
+            if is_bac:
+                if reader_paddle_ar:
+                    try:
+                        result = reader_paddle_ar.ocr(img_path)
+                        if result and result[0]:
+                            for line in result[0]:
+                                blocks.append((line[0], line[1][0]))
+                    except Exception as e:
+                        print(f"PaddleOCR (AR) error: {e}")
+                elif reader_easyocr_ar:
+                    # Fallback for Arabic if Paddle is missing
+                    try:
+                        result = reader_easyocr_ar.readtext(img_path, detail=1)
+                        for res in result: 
+                            # Avoid duplicates
+                            if not any(b[1] == res[1] for b in blocks):
+                                blocks.append((res[0], res[1]))
+                    except Exception as e:
+                        print(f"EasyOCR (AR fallback) error: {e}")
                     
+            # 3. Fallback to EasyOCR if no blocks found yet
             if not blocks and reader_easyocr:
                 try:
                     result = reader_easyocr.readtext(img_path, detail=1)
@@ -379,17 +542,22 @@ def process_image(image_path, expected_name=None, expected_cin=None, expected_cn
                     print(f"EasyOCR error: {e}")
             return blocks
 
-        # 1. Main Extraction (French/Latin)
-        ocr_blocks = run_ocr(img_to_ocr)
+        # 1. Main Extraction
+        ocr_blocks = run_ocr(img_to_ocr, is_bac)
         if not ocr_blocks and processed_path:
-            ocr_blocks = run_ocr(image_path)
+            ocr_blocks = run_ocr(image_path, is_bac)
             
         ocr_blocks = sort_blocks_reading_order(ocr_blocks)
         extracted_text = "\n".join(t for _, t in ocr_blocks)
         
-        # Supervised Name Extraction
+        # Supervised Name Extraction (Latin)
         extracted_name = supervised_name_extraction(extracted_text, expected_name, is_bac)
         is_name_match = extracted_name is not None
+        
+        # Arabic Name Extraction (Targeted + Heuristic)
+        extracted_arabic_name = None
+        if is_bac:
+            extracted_arabic_name = extract_arabic_name(extracted_text, ocr_blocks, expected_name)
         
         # DOB Extraction
         extracted_dob = extract_birth_date_smart(extracted_text, ocr_blocks)
@@ -401,6 +569,7 @@ def process_image(image_path, expected_name=None, expected_cin=None, expected_cn
         return {
             "file": os.path.basename(image_path),
             "extracted_name": extracted_name or "Non détecté",
+            "extracted_arabic_name": extracted_arabic_name or "Non détecté",
             "is_name_match": is_name_match,
             "extracted_dob": extracted_dob or "Non détecté",
             "extracted_cin": extracted_cin,
@@ -485,6 +654,7 @@ def validate_folder():
                     "extracted_dob": ocr_data.get('extracted_dob'),
                     "extracted_cin": ocr_data.get('extracted_cin'),
                     "extracted_cne": ocr_data.get('extracted_cne'),
+                    "extracted_arabic_name": ocr_data.get('extracted_arabic_name'),
                     "raw_data": ocr_data
                 })
 
@@ -560,4 +730,4 @@ def validate_folder():
         shutil.rmtree(temp_dir)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5001)
+    app.run(host='0.0.0.0', port=5003)

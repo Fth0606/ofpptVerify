@@ -405,6 +405,11 @@ const Students = () => {
                               <span className="text-xs text-muted-foreground truncate">
                                 {detail.extracted_name || detail.extracted_cin || detail.extracted_cne || "Aucune donnée extraite"}
                               </span>
+                              {detail.extracted_arabic_name && detail.extracted_arabic_name !== "Non détecté" && (
+                                <Badge variant="secondary" className="text-[10px] bg-green-100 text-green-700 hover:bg-green-100 border-green-200" dir="rtl">
+                                  {detail.extracted_arabic_name}
+                                </Badge>
+                              )}
                               {detail.extracted_dob && (
                                 <Badge variant="outline" className="text-[10px] font-normal py-0">
                                   {detail.extracted_dob}
