@@ -23,19 +23,40 @@ import {
 
 const statusBadge = (status: string) => {
   switch (status) {
-    case "verified": return <Badge className="bg-green-100 text-green-700 border-0">✅ Vérifié</Badge>;
-    case "mismatch": return <Badge className="bg-yellow-100 text-yellow-700 border-0">⚠️ Non Concordant</Badge>;
-    case "pending": return <Badge variant="secondary">⏳ En Attente</Badge>;
-    case "missing": return <Badge variant="destructive">❌ Manquant</Badge>;
-    default: return <Badge variant="secondary">{status}</Badge>;
+    case "verified": 
+      return (
+        <Badge className="bg-secondary/15 text-secondary border-secondary/20 rounded-full px-4 py-1.5 font-black text-[10px] tracking-widest shadow-[0_0_15px_rgba(46,125,50,0.1)]">
+          CONFORME
+        </Badge>
+      );
+    case "mismatch": 
+      return (
+        <Badge className="bg-destructive/15 text-destructive border-destructive/20 rounded-full px-4 py-1.5 font-black text-[10px] tracking-widest shadow-[0_0_15px_rgba(239,68,68,0.1)]">
+          ERREUR OCR
+        </Badge>
+      );
+    case "pending": 
+      return (
+        <Badge className="bg-primary/15 text-primary border-primary/20 rounded-full px-4 py-1.5 font-black text-[10px] tracking-widest">
+          EN ATTENTE
+        </Badge>
+      );
+    case "missing": 
+      return (
+        <Badge variant="outline" className="text-muted-foreground border-dashed rounded-full px-4 py-1.5 font-black text-[10px] tracking-widest">
+          DOCS MANQUANTS
+        </Badge>
+      );
+    default: 
+      return <Badge className="rounded-full px-4 py-1.5 font-black text-[10px] tracking-widest">{status}</Badge>;
   }
 };
 
 const ocrStatusIcon = (status: string) => {
   switch (status) {
-    case "processed": return <CheckCircle2 className="h-3 w-3 text-green-500" />;
-    case "failed": return <AlertCircle className="h-3 w-3 text-red-500" />;
-    default: return <Clock className="h-3 w-3 text-yellow-500" />;
+    case "processed": return <CheckCircle2 className="h-4 w-4 text-secondary" />;
+    case "failed": return <AlertCircle className="h-4 w-4 text-destructive" />;
+    default: return <Clock className="h-4 w-4 text-primary" />;
   }
 };
 
@@ -88,7 +109,6 @@ const StudentDetail = () => {
       toast.loading(`Téléversement en cours de ${uploadingType}...`, { id: "upload" });
       await apiService.uploadDocument(id, uploadingType, file);
       toast.success("Document téléversé avec succès", { id: "upload" });
-      // Re-fetch documents to reflect the new upload
       const docsData = await apiService.fetchStudentDocuments(id);
       setDocuments(docsData);
       if (student) setStudent({ ...student, documentsUploaded: docsData.length });
@@ -123,24 +143,32 @@ const StudentDetail = () => {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-        <p className="text-muted-foreground">Chargement des détails de l'étudiant...</p>
+      <div className="flex flex-col items-center justify-center py-32 space-y-4">
+        <div className="h-12 w-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+        <p className="text-sm font-bold tracking-widest text-muted-foreground animate-pulse">SYNCHRONISATION DU DOSSIER...</p>
       </div>
     );
   }
 
   if (!student) {
     return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <p className="text-muted-foreground">Étudiant introuvable</p>
-        <Button variant="ghost" onClick={() => navigate("/students")} className="mt-4">Retour aux Étudiants</Button>
+      <div className="flex flex-col items-center justify-center py-32 space-y-6">
+        <div className="h-20 w-20 rounded-3xl bg-destructive/10 flex items-center justify-center">
+          <AlertCircle className="h-10 w-10 text-destructive" />
+        </div>
+        <div className="text-center">
+          <h2 className="text-2xl font-black">Étudiant Introuvable</h2>
+          <p className="text-muted-foreground mt-2">Le dossier que vous tentez de consulter n'existe plus ou a été déplacé.</p>
+        </div>
+        <Button onClick={() => navigate("/students")} className="rounded-xl px-10 h-12 font-bold">
+          Retour au Registre
+        </Button>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-10 pb-20">
       <input
         type="file"
         ref={fileInputRef}
@@ -150,94 +178,139 @@ const StudentDetail = () => {
       />
 
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/students")}>
-          <ArrowLeft className="h-4 w-4" />
+      <div className="flex flex-col md:flex-row md:items-center gap-6 animate-in fade-in slide-in-from-top-4 duration-500">
+        <Button variant="ghost" size="icon" className="h-12 w-12 rounded-2xl bg-background shadow-sm border border-primary/5 hover:bg-primary/5 hover:text-primary transition-all" onClick={() => navigate("/students")}>
+          <ArrowLeft className="h-5 w-5" />
         </Button>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold">
+          <h1 className="text-4xl font-black tracking-tight brand-gradient-text uppercase">
             {student.Nom} {student.Prenom}
           </h1>
-          <p className="text-muted-foreground">{student.LibelleLong} · {student.Site}</p>
+          <div className="flex items-center gap-3 mt-2 text-muted-foreground font-bold text-sm">
+            <GraduationCap className="h-4 w-4 text-primary" />
+            <span>{student.LibelleLong}</span>
+            <span className="opacity-20">|</span>
+            <span className="font-mono text-xs">{student.Site}</span>
+          </div>
         </div>
-        {statusBadge(student.status)}
+        <div className="flex items-center gap-4">
+          {statusBadge(student.status)}
+        </div>
       </div>
 
       {/* Info Grid */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader><CardTitle className="text-base">Informations Personnelles</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
+      <div className="grid gap-6 md:grid-cols-2 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100">
+        <Card className="glass-card border-none shadow-xl overflow-hidden">
+          <CardHeader className="bg-primary/5 border-b border-primary/10 py-5 px-6">
+            <CardTitle className="text-sm font-black tracking-widest uppercase flex items-center gap-2">
+              <CreditCard className="h-4 w-4 text-primary" />
+              État Civil
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-6 space-y-4">
             {[
-              ["Nom (Français)", student.Nom || "-"],
-              ["Prénom (Français)", student.Prenom || "-"],
-              ["Nom (Arabe)", student.Nom_Arabe || "-"],
-              ["Prénom (Arabe)", student.Prenom_arabe || "-"],
-              ["Date de Naissance", student.DateNaissance],
-              ["CIN", student.cin],
+              ["Nom (FR)", student.Nom],
+              ["Prénom (FR)", student.Prenom],
+              ["Nom Arabe", student.Nom_Arabe, "font-arabic text-lg text-secondary font-bold text-right"],
+              ["Prénom Arabe", student.Prenom_arabe, "font-arabic text-lg text-secondary font-bold text-right"],
+              ["Né(e) le", student.DateNaissance, "font-mono"],
+              ["CIN / Passport", student.cin, "font-mono font-bold text-primary"],
               ["Nationalité", student.Nationalite],
-              ["Numéro de Téléphone", student.NTelephone],
-            ].map(([label, value]) => (
-              <div key={label} className="flex justify-between text-sm">
-                <span className="text-muted-foreground">{label}</span>
-                <span className="font-medium">{value || "-"}</span>
+              ["Contact", student.NTelephone, "font-mono"],
+            ].map(([label, value, extraClass]) => (
+              <div key={label} className="flex justify-between items-center py-2 border-b border-primary/5 last:border-0 group">
+                <span className="text-[11px] font-black uppercase tracking-widest text-muted-foreground group-hover:text-primary transition-colors">{label}</span>
+                <span className={`text-sm font-bold ${extraClass || ""}`} dir={extraClass?.includes("font-arabic") ? "rtl" : "ltr"}>
+                  {value || <span className="text-muted-foreground/30 font-normal italic">Non spécifié</span>}
+                </span>
               </div>
             ))}
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader><CardTitle className="text-base">Informations Académiques</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
+        <Card className="glass-card border-none shadow-xl overflow-hidden">
+          <CardHeader className="bg-secondary/5 border-b border-secondary/10 py-5 px-6">
+            <CardTitle className="text-sm font-black tracking-widest uppercase flex items-center gap-2">
+              <GraduationCap className="h-4 w-4 text-secondary" />
+              Parcours Académique
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-6 space-y-4">
             {[
-              ["Matricule (CNE)", student.MatriculeEtudiant],
-              ["Site", student.Site],
-              ["Libellé Long (Filière)", student.LibelleLong],
-              ["Code Diplôme", student.CodeDiplome],
+              ["Identifiant Unique", student.MatriculeEtudiant, "font-mono font-bold text-secondary"],
+              ["Établissement", student.Site, "text-xs"],
+              ["Spécialité", student.LibelleLong, "text-xs leading-relaxed"],
+              ["Groupe / Code", student.CodeDiplome, "font-mono text-xs bg-secondary/10 text-secondary px-2 py-1 rounded-lg w-fit"],
               ["Année d'étude", student.anneeEtude],
-              ["Niveau Scolaire", student.NiveauScolaire],
-            ].map(([label, value]) => (
-              <div key={label} className="flex justify-between text-sm">
-                <span className="text-muted-foreground">{label}</span>
-                <span className="font-medium max-w-[60%] text-right">{value || "-"}</span>
+              ["Niveau Diplôme", student.NiveauScolaire],
+            ].map(([label, value, extraClass]) => (
+              <div key={label} className="flex justify-between items-start py-2 border-b border-primary/5 last:border-0 group">
+                <span className="text-[11px] font-black uppercase tracking-widest text-muted-foreground group-hover:text-secondary transition-colors mt-1">{label}</span>
+                <span className={`text-sm font-bold text-right max-w-[60%] ${extraClass || ""}`}>
+                  {value || <span className="text-muted-foreground/30 font-normal italic">Non spécifié</span>}
+                </span>
               </div>
             ))}
           </CardContent>
         </Card>
       </div>
 
-      {/* Mismatch Details */}
+      {/* Anomalies Card */}
       {student.mismatch_details && student.mismatch_details.length > 0 && (
-        <Card className="border-red-200 bg-red-50/30">
-          <CardHeader><CardTitle className="text-base text-red-700">⚠️ Détails des Non Concordances</CardTitle></CardHeader>
-          <CardContent className="space-y-2">
+        <Card className="bg-destructive/5 border-destructive/20 shadow-lg animate-in fade-in slide-in-from-bottom-4 duration-500 delay-200">
+          <CardHeader className="py-4 border-b border-destructive/10">
+            <CardTitle className="text-sm font-black tracking-widest uppercase text-destructive flex items-center gap-2">
+              <AlertCircle className="h-4 w-4" /> 
+              Rapport de Discordance OCR
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-6 space-y-3">
             {student.mismatch_details.map((m: any, i: number) => (
-              <div key={i} className={`text-sm p-2 rounded border ${m.soft ? 'bg-amber-50 border-amber-200' : 'bg-red-100/50 border-red-200'}`}>
-                <span className="font-semibold">{m.field}</span> ({m.document}):&nbsp;
-                Attendu "<span className="text-blue-700">{m.excelValue}</span>",&nbsp;
-                Obtenu "<span className="text-red-700">{m.ocrValue}</span>"
+              <div key={i} className={`flex items-start gap-4 p-4 rounded-2xl border transition-all ${m.soft ? 'bg-amber-500/10 border-amber-500/20' : 'bg-destructive/10 border-destructive/20'}`}>
+                <div className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 ${m.soft ? 'bg-amber-500/20 text-amber-600' : 'bg-destructive/20 text-destructive'}`}>
+                  <FileWarning className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-xs font-black uppercase tracking-widest mb-1 opacity-70">{m.field} <span className="opacity-50">·</span> {m.document}</p>
+                  <div className="flex items-center gap-3 font-bold text-sm">
+                    <span className="text-muted-foreground">Attendu: <span className="text-foreground">"{m.excelValue}"</span></span>
+                    <ArrowLeft className="h-3 w-3 rotate-180 opacity-30" />
+                    <span className={m.soft ? "text-amber-600" : "text-destructive"}>Obtenu: "{m.ocrValue}"</span>
+                  </div>
+                </div>
               </div>
             ))}
           </CardContent>
         </Card>
       )}
 
-      {/* Arabic Name Verification result */}
+      {/* Arabic Verification Results */}
       {(student as any).verified_arabic_name && (
-        <Card className="border-purple-200 bg-purple-50/30">
-          <CardHeader><CardTitle className="text-base text-purple-700">🎓 Nom Arabe Vérifié (Baccalauréat)</CardTitle></CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-3 rounded-lg bg-white border border-purple-100">
-                <p className="text-[10px] uppercase text-muted-foreground mb-1">Extrait du document</p>
-                <p className="font-semibold text-purple-700 text-right text-sm" dir="rtl">{(student as any).verified_arabic_name}</p>
+        <Card className="bg-secondary/5 border-secondary/20 shadow-lg animate-in fade-in slide-in-from-bottom-4 duration-500 delay-250">
+          <CardHeader className="py-4 border-b border-secondary/10">
+            <CardTitle className="text-sm font-black tracking-widest uppercase text-secondary flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4" /> 
+              Validation de l'Identité Arabe
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-6">
+            <div className="grid grid-cols-2 gap-6">
+              <div className="p-5 rounded-3xl bg-white dark:bg-black/40 border border-secondary/20 shadow-sm relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-2 opacity-5">
+                  <FileText className="h-20 w-20" />
+                </div>
+                <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest mb-4">Extrait Baccalauréat</p>
+                <p className="font-arabic text-3xl font-black text-secondary text-right" dir="rtl">{(student as any).verified_arabic_name}</p>
               </div>
-              <div className="p-3 rounded-lg bg-white border border-blue-100">
-                <p className="text-[10px] uppercase text-muted-foreground mb-1">Base de données</p>
-                <p className="font-semibold text-blue-700 text-right text-sm" dir="rtl">
+              <div className="p-5 rounded-3xl bg-white dark:bg-black/40 border border-primary/20 shadow-sm relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-2 opacity-5">
+                  <CreditCard className="h-20 w-20" />
+                </div>
+                <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest mb-4">Base de Données Centrale</p>
+                <p className="font-arabic text-3xl font-black text-primary text-right" dir="rtl">
                   {student.Nom_Arabe || student.Prenom_arabe
                     ? `${student.Nom_Arabe || ''} ${student.Prenom_arabe || ''}`.trim()
-                    : <span className="text-gray-400 italic font-normal">غير متوفر</span>}
+                    : <span className="text-muted-foreground/30 font-normal italic text-lg">غير متوفر</span>}
                 </p>
               </div>
             </div>
@@ -245,143 +318,130 @@ const StudentDetail = () => {
         </Card>
       )}
 
-      {/* Documents */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center justify-between">
-            <span>Documents <span className="text-muted-foreground font-normal text-sm ml-1">({documents.length}/3 téléversés)</span></span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-3">
-            {DOC_TYPES.map((docType) => {
-              const doc = documents.find(d => d.type === docType.key);
-              const Icon = docType.icon;
-              return (
-                <div
-                  key={docType.key}
-                  className={`flex flex-col gap-3 rounded-xl border-2 p-5 transition-all ${doc
-                      ? "border-green-300 bg-green-50/40 dark:bg-green-950/20"
-                      : "border-dashed border-border"
-                    }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <Icon className={`h-6 w-6 ${doc ? "text-green-600" : "text-muted-foreground"}`} />
-                    <p className="text-sm font-semibold">{docType.label}</p>
-                  </div>
+      {/* Documents Section */}
+      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-300">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-black tracking-tight flex items-center gap-2">
+            Documents Archivés
+            <span className="text-xs font-bold bg-muted px-2 py-1 rounded-full text-muted-foreground">{documents.length}/3</span>
+          </h2>
+          <Button variant="ghost" size="sm" className="font-bold text-xs hover:text-primary" onClick={() => triggerUpload("any")}>
+            <Upload className="h-3 w-3 mr-2" />
+            Ajouter un document
+          </Button>
+        </div>
 
+        <div className="grid gap-6 md:grid-cols-3">
+          {DOC_TYPES.map((docType) => {
+            const doc = documents.find(d => d.type === docType.key);
+            const Icon = docType.icon;
+            return (
+              <Card 
+                key={docType.key}
+                className={`glass-card border-none shadow-xl overflow-hidden flex flex-col h-full transition-all duration-500 hover:scale-[1.02] ${doc ? "ring-2 ring-secondary/20 shadow-secondary/5" : "opacity-60 border-dashed border-2 border-muted"}`}
+              >
+                <CardHeader className={`py-4 border-b flex flex-row items-center justify-between ${doc ? "bg-secondary/5 border-secondary/10" : "bg-muted/50 border-muted"}`}>
+                  <div className="flex items-center gap-2">
+                    <Icon className={`h-4 w-4 ${doc ? "text-secondary" : "text-muted-foreground"}`} />
+                    <CardTitle className="text-xs font-black tracking-widest uppercase">{docType.label}</CardTitle>
+                  </div>
+                  {doc && ocrStatusIcon(doc.ocr_status)}
+                </CardHeader>
+                <CardContent className="p-0 flex-1 flex flex-col">
                   {doc ? (
                     <>
-                      {/* Thumbnail preview */}
-                      {doc.mime_type.startsWith("image/") && (
-                        <div className="w-full overflow-hidden rounded-lg border border-green-200 bg-white">
+                      <div className="relative group aspect-[4/3] bg-muted/20 overflow-hidden">
+                        {doc.mime_type.startsWith("image/") ? (
                           <img
                             src={getDocumentUrl(doc.id)}
                             alt={docType.label}
-                            className="w-full h-32 object-cover"
-                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                           />
+                        ) : (
+                          <div className="w-full h-full flex flex-col items-center justify-center space-y-2">
+                            <FileText className="h-12 w-12 text-muted-foreground opacity-20" />
+                            <span className="text-xs font-bold text-muted-foreground">Document PDF</span>
+                          </div>
+                        )}
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                          <Button size="icon" variant="secondary" className="rounded-xl h-10 w-10 shadow-xl" asChild>
+                            <a href={getDocumentUrl(doc.id)} target="_blank" rel="noreferrer">
+                              <ExternalLink className="h-5 w-5" />
+                            </a>
+                          </Button>
+                          <Button size="icon" variant="destructive" className="rounded-xl h-10 w-10 shadow-xl" onClick={() => setDocToDelete(doc)}>
+                            <Trash2 className="h-5 w-5" />
+                          </Button>
                         </div>
-                      )}
-
-                      <div className="space-y-1.5 text-xs text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          {ocrStatusIcon(doc.ocr_status)}
-                          <span className="capitalize">OCR: {doc.ocr_status}</span>
-                        </div>
-                        {doc.ocr_extracted_name && (
-                          <div className="p-1.5 rounded bg-white border text-[11px]">
-                            <span className="text-gray-400">Nom : </span>
-                            <span className="font-medium text-gray-700">{doc.ocr_extracted_name}</span>
-                          </div>
-                        )}
-                        {doc.ocr_extracted_arabic_name && (
-                          <div className="p-1.5 rounded bg-white border text-[11px] text-right dir-rtl">
-                            <span className="text-gray-400">Nom Arabe : </span>
-                            <span className="font-medium text-green-700">{doc.ocr_extracted_arabic_name}</span>
-                          </div>
-                        )}
-                        {doc.ocr_extracted_dob && (
-                          <div className="p-1.5 rounded bg-white border text-[11px]">
-                            <span className="text-gray-400">Date Nais. : </span>
-                            <span className="font-medium text-gray-700">{doc.ocr_extracted_dob}</span>
-                          </div>
-                        )}
-                        {doc.ocr_extracted_cne && (
-                          <div className="p-1.5 rounded bg-white border text-[11px]">
-                            <span className="text-gray-400">CNE/Massar : </span>
-                            <span className="font-medium text-gray-700">{doc.ocr_extracted_cne}</span>
-                          </div>
-                        )}
-                        <p className="text-[10px]">{doc.original_filename} · {formatBytes(doc.file_size)}</p>
                       </div>
 
-                      <div className="flex gap-2">
-                        <a
-                          href={getDocumentUrl(doc.id)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex-1"
-                        >
-                          <Button variant="outline" size="sm" className="w-full h-8 text-xs border-green-300 text-green-700 hover:bg-green-50">
-                            <ExternalLink className="mr-1 h-3 w-3" />
-                            Voir
-                          </Button>
-                        </a>
+                      <div className="p-4 space-y-4 flex-1">
+                        <div className="space-y-3">
+                          {doc.ocr_extracted_name && (
+                            <div className="space-y-1">
+                              <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Nom Détecté</p>
+                              <p className="text-xs font-bold truncate text-foreground/80">{doc.ocr_extracted_name}</p>
+                            </div>
+                          )}
+                          {doc.ocr_extracted_arabic_name && (
+                            <div className="space-y-1">
+                              <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Identité Arabe</p>
+                              <p className="text-base font-arabic font-bold text-secondary text-right" dir="rtl">{doc.ocr_extracted_arabic_name}</p>
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="pt-4 border-t border-primary/5 flex items-center justify-between text-[10px] text-muted-foreground font-mono">
+                          <span className="truncate max-w-[120px]">{doc.original_filename}</span>
+                          <span className="font-bold">{formatBytes(doc.file_size)}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="p-4 bg-muted/10 border-t border-primary/5">
+                        <Button variant="ghost" className="w-full h-9 rounded-xl text-xs font-bold text-muted-foreground hover:bg-primary/5 hover:text-primary transition-all" onClick={() => triggerUpload(docType.key)}>
+                          Remplacer le document
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex-1 flex flex-col items-center justify-center p-10 space-y-4">
+                      <div className="h-16 w-16 rounded-full border-2 border-dashed border-muted flex items-center justify-center">
+                        <Upload className="h-6 w-6 text-muted-foreground/40" />
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-4">Document manquant</p>
                         <Button
                           variant="outline"
                           size="sm"
-                          className="h-8 w-8 p-0 border-red-200 text-red-500 hover:bg-red-50"
-                          onClick={() => setDocToDelete(doc)}
+                          className="rounded-xl border-primary/20 h-10 px-6 font-bold text-primary hover:bg-primary/5"
+                          onClick={() => triggerUpload(docType.key)}
+                          disabled={uploadingType !== null}
                         >
-                          <Trash2 className="h-3 w-3" />
+                          Téléverser
                         </Button>
                       </div>
-
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 text-xs text-muted-foreground"
-                        onClick={() => triggerUpload(docType.key)}
-                        disabled={uploadingType !== null}
-                      >
-                        Remplacer
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-xs text-muted-foreground">Aucun document téléversé</p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => triggerUpload(docType.key)}
-                        disabled={uploadingType !== null}
-                      >
-                        <Upload className="mr-2 h-3 w-3" />
-                        Téléverser
-                      </Button>
-                    </>
+                    </div>
                   )}
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      </div>
 
-      {/* Delete Document Dialog */}
+      {/* Delete Dialog */}
       <AlertDialog open={!!docToDelete} onOpenChange={() => setDocToDelete(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className="rounded-[2rem] border-none shadow-2xl glass-card">
           <AlertDialogHeader>
-            <AlertDialogTitle>Supprimer le Document ?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Cela supprimera définitivement <strong>{docToDelete?.original_filename}</strong> de la base de données.
+            <AlertDialogTitle className="text-2xl font-black">Confirmer la Suppression</AlertDialogTitle>
+            <AlertDialogDescription className="text-base font-medium">
+              Êtes-vous sûr de vouloir supprimer définitivement <span className="text-foreground font-bold italic">"{docToDelete?.original_filename}"</span> ? Cette action est irréversible.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Annuler</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteDoc} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Supprimer
+          <AlertDialogFooter className="mt-6">
+            <AlertDialogCancel className="rounded-xl font-bold h-11 border-primary/10">Conserver</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteDoc} className="rounded-xl bg-destructive hover:bg-destructive/90 text-white shadow-lg shadow-destructive/20 h-11 px-8 font-bold">
+              Supprimer le fichier
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

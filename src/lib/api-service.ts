@@ -151,6 +151,19 @@ export const apiService = {
     return response.json();
   },
 
+  async verifyStudent(cin: string): Promise<any> {
+    const response = await fetch(`${API_URL}/students/verify-student`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ cin }),
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || errorData.message || "Failed to verify student");
+    }
+    return response.json();
+  },
+
   // ── Documents ──────────────────────────────────────────
 
   /**

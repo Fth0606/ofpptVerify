@@ -13,6 +13,7 @@ Route::get('/documents/{id}/file', [StudentController::class, 'serveDocument']);
     Route::post('/students/bulk',        [StudentController::class, 'bulkStore']);
     Route::post('/students/bulk-status', [StudentController::class, 'bulkUpdateStatus']);
     Route::post('/students/verify-group',[StudentController::class, 'verifyGroup']);
+    Route::post('/students/verify-student',[StudentController::class, 'verifyStudent']);
     Route::post('/students/{cin}/status',[StudentController::class, 'updateStatus']);
     Route::delete('/students/{id}',      [StudentController::class, 'destroy']);
 

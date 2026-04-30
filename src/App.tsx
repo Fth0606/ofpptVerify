@@ -14,10 +14,13 @@ import MismatchedStudents from "@/pages/MismatchedStudents";
 import CorrectStudents from "@/pages/CorrectStudents";
 import NotFound from "@/pages/NotFound";
 
+import { ThemeProvider } from "@/components/theme-provider";
+
 const queryClient = new QueryClient();
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
+  <ThemeProvider defaultTheme="dark" storageKey="ofppt-verify-theme">
+    <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <Sonner />
@@ -38,6 +41,7 @@ const App = () => (
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
+  </ThemeProvider>
 );
 
 export default App;

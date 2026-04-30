@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Filter, ArrowUpDown, MoreHorizontal, User, Trash2, Eye, CheckCircle2, AlertCircle, FileWarning, XCircle, ShieldCheck, FileCheck, FileX } from "lucide-react";
+import { Search, Filter, ArrowUpDown, MoreHorizontal, User, Users, Upload, Trash2, Eye, CheckCircle2, AlertCircle, FileWarning, XCircle, ShieldCheck, FileCheck, FileX } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { apiService, Student } from "@/lib/api-service";
 import { toast } from "sonner";
@@ -98,20 +98,37 @@ const Students = () => {
     }
 
     setIsVerifying(true);
-    const toastId = toast.loading(`Vérification du groupe ${groupFilter}... Cela peut prendre une minute.`);
+    const toastId = toast.loading(`Vérification du groupe ${groupFilter}... (0/${withDocs.length})`);
+    
+    let successCount = 0;
+    const currentResults: any[] = [];
     
     try {
-      const response = await apiService.verifyGroup(groupFilter);
-      setResults(response);
-      toast.success(`Vérification du groupe ${groupFilter} terminée ! ${response.length} étudiants traités.`, { id: toastId });
+      for (let i = 0; i < withDocs.length; i++) {
+        const student = withDocs[i];
+        toast.loading(`Vérification du groupe ${groupFilter}... (${i + 1}/${withDocs.length}) - ${student.Nom} ${student.Prenom}`, { id: toastId });
+        
+        try {
+          const result = await apiService.verifyStudent(student.cin);
+          currentResults.push(result);
+          successCount++;
+        } catch (err: any) {
+          console.error(`Failed to verify student ${student.cin}:`, err);
+          // We continue with the next student even if one fails
+        }
+      }
+      
+      setResults(currentResults);
+      
+      if (successCount === withDocs.length) {
+        toast.success(`Vérification terminée ! ${successCount} étudiants traités avec succès.`, { id: toastId });
+      } else {
+        toast.warning(`Vérification terminée avec des erreurs. ${successCount}/${withDocs.length} étudiants traités.`, { id: toastId });
+      }
+      
       fetchStudents(); // Refresh data
     } catch (error: any) {
-      const msg = error.message || "La vérification a échoué";
-      if (msg.includes("No documents") || msg.includes("Aucun document")) {
-        toast.warning(`Aucun document téléversé pour ce groupe. Téléversez des documents d'abord.`, { id: toastId });
-      } else {
-        toast.error(`La vérification a échoué : ${msg}`, { id: toastId });
-      }
+      toast.error(`Erreur inattendue pendant la vérification.`, { id: toastId });
       console.error(error);
     } finally {
       setIsVerifying(false);
@@ -120,45 +137,77 @@ const Students = () => {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case "verified": return <Badge variant="success">Vérifié</Badge>;
-      case "mismatch": return <Badge variant="destructive">Non Concordant</Badge>;
-      case "pending": return <Badge variant="secondary">En Attente</Badge>;
-      case "missing": return <Badge variant="outline">Docs Manquants</Badge>;
-      default: return <Badge variant="secondary">{status}</Badge>;
+      case "verified": 
+        return (
+          <Badge className="bg-secondary/15 text-secondary border-secondary/20 rounded-full px-4 py-1.5 font-black text-[10px] tracking-widest shadow-lg shadow-secondary/5">
+            <ShieldCheck className="h-3 w-3 mr-1.5" />
+            CONFORME
+          </Badge>
+        );
+      case "mismatch": 
+        return (
+          <Badge className="bg-destructive/15 text-destructive border-destructive/20 rounded-full px-4 py-1.5 font-black text-[10px] tracking-widest shadow-lg shadow-destructive/5">
+            <AlertCircle className="h-3 w-3 mr-1.5" />
+            ANOMALIE
+          </Badge>
+        );
+      case "pending": 
+        return (
+          <Badge className="bg-primary/15 text-primary border-primary/20 rounded-full px-4 py-1.5 font-black text-[10px] tracking-widest">
+            <ArrowUpDown className="h-3 w-3 mr-1.5 animate-bounce" />
+            EN ATTENTE
+          </Badge>
+        );
+      case "missing": 
+        return (
+          <Badge variant="outline" className="text-muted-foreground border-dashed rounded-full px-4 py-1.5 font-black text-[10px] tracking-widest bg-muted/10 opacity-60">
+            <FileX className="h-3 w-3 mr-1.5" />
+            INCOMPLET
+          </Badge>
+        );
+      default: 
+        return <Badge className="rounded-full px-4 py-1.5 font-black text-[10px] uppercase tracking-widest">{status}</Badge>;
     }
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-8 pb-10">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Panneau de Vérification</h1>
-          <p className="text-muted-foreground">Sélectionnez un groupe ci-dessous et cliquez sur "Vérifier le Groupe" pour faire correspondre les documents avec les enregistrements.</p>
+          <h1 className="text-3xl font-bold tracking-tight brand-gradient-text">Gestion des Vérifications</h1>
+          <p className="text-muted-foreground mt-1">Supervision du processus OCR et validation de l'intégrité des données institutionnelles</p>
         </div>
-        <Button onClick={() => navigate("/import")} variant="outline">Importer la liste des étudiants</Button>
+        <div className="flex items-center gap-3">
+          <Button onClick={() => navigate("/import")} variant="outline" className="rounded-xl border-primary/20 text-primary hover:bg-primary/5 font-bold">
+            <Users className="mr-2 h-4 w-4" /> Importer Étudiants
+          </Button>
+          <Button onClick={() => navigate("/upload")} className="rounded-xl bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20 font-bold">
+            <Upload className="mr-2 h-4 w-4" /> Téléverser Documents
+          </Button>
+        </div>
       </div>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-col md:flex-row gap-4">
+      <Card className="glass-card border-none shadow-2xl overflow-hidden">
+        <CardHeader className="bg-primary/5 border-b border-primary/10 pb-6">
+          <div className="flex flex-col xl:flex-row gap-5">
             <div className="relative flex-1">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-3.5 top-3 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Rechercher par nom ou CIN..."
-                className="pl-9"
+                placeholder="Rechercher par nom, CIN ou Massar..."
+                className="pl-11 h-11 rounded-xl bg-background/50 border-primary/10 focus-visible:ring-primary/20"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-3">
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[160px]">
-                  <Filter className="mr-2 h-4 w-4" />
-                  <SelectValue placeholder="Statut" />
+                <SelectTrigger className="w-[180px] h-11 rounded-xl bg-background/50 border-primary/10">
+                  <Filter className="mr-2 h-4 w-4 text-primary" />
+                  <SelectValue placeholder="Filtrer par Statut" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="rounded-xl border-primary/10">
                   <SelectItem value="all">Tous les Statuts</SelectItem>
-                  <SelectItem value="verified">Vérifiés</SelectItem>
+                  <SelectItem value="verified">Conformes</SelectItem>
                   <SelectItem value="mismatch">Non Concordants</SelectItem>
                   <SelectItem value="pending">En Attente</SelectItem>
                   <SelectItem value="missing">Docs Manquants</SelectItem>
@@ -166,11 +215,11 @@ const Students = () => {
               </Select>
 
               <Select value={groupFilter} onValueChange={setGroupFilter}>
-                <SelectTrigger className="w-[160px]">
-                  <Filter className="mr-2 h-4 w-4" />
-                  <SelectValue placeholder="Groupe" />
+                <SelectTrigger className="w-[180px] h-11 rounded-xl bg-background/50 border-primary/10">
+                  <Filter className="mr-2 h-4 w-4 text-primary" />
+                  <SelectValue placeholder="Filtrer par Groupe" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="rounded-xl border-primary/10">
                   <SelectItem value="all">Tous les Groupes</SelectItem>
                   {uniqueGroups.map(group => (
                     <SelectItem key={group} value={group}>{group}</SelectItem>
@@ -182,128 +231,120 @@ const Students = () => {
                 <Button 
                   onClick={handleVerifyGroup} 
                   disabled={isVerifying}
-                  className="bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90"
+                  className="h-11 rounded-xl bg-secondary hover:bg-secondary/90 text-white shadow-lg shadow-secondary/20 font-bold px-6 min-w-[240px]"
                 >
-                  {isVerifying ? "Vérification..." : `Lancer la vérification pour ${groupFilter}`}
+                  {isVerifying ? (
+                    <span className="flex items-center gap-2">
+                      <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Traitement en cours...
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-2">
+                      <ShieldCheck className="h-5 w-5" />
+                      Vérifier le Groupe {groupFilter}
+                    </span>
+                  )}
                 </Button>
               )}
             </div>
           </div>
-          {groupFilter !== "all" && !isVerifying && (
-            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md text-sm text-blue-700">
-              <strong>Astuce :</strong> Cliquer sur "Lancer la vérification" traitera tous les étudiants de <strong>{groupFilter}</strong> qui ont téléversé des documents.
-            </div>
-          )}
         </CardHeader>
-        <CardContent>
-          <div className="rounded-md border overflow-hidden">
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
             <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>CIN <ArrowUpDown className="inline h-3 w-3" /></TableHead>
-                  <TableHead>Nom <ArrowUpDown className="inline h-3 w-3" /></TableHead>
-                  <TableHead>Prénom <ArrowUpDown className="inline h-3 w-3" /></TableHead>
-                  <TableHead>الاسم العربي</TableHead>
-                  <TableHead>Filière <ArrowUpDown className="inline h-3 w-3" /></TableHead>
-                  <TableHead>Niveau Scolaire <ArrowUpDown className="inline h-3 w-3" /></TableHead>
-                  <TableHead className="text-center">Docs</TableHead>
-                  <TableHead className="text-center">Statut</TableHead>
-                  <TableHead className="text-center">Actions</TableHead>
+              <TableHeader className="bg-muted/30">
+                <TableRow className="hover:bg-transparent border-b border-primary/5">
+                  <TableHead className="w-[120px] font-bold text-[11px] uppercase tracking-widest py-5">CIN</TableHead>
+                  <TableHead className="font-bold text-[11px] uppercase tracking-widest py-5">Identité (FR)</TableHead>
+                  <TableHead className="text-right font-bold text-[11px] uppercase tracking-widest py-5 pr-8">Identité (AR)</TableHead>
+                  <TableHead className="font-bold text-[11px] uppercase tracking-widest py-5">Filière / Groupe</TableHead>
+                  <TableHead className="text-center font-bold text-[11px] uppercase tracking-widest py-5">Documents</TableHead>
+                  <TableHead className="text-center font-bold text-[11px] uppercase tracking-widest py-5">État OCR</TableHead>
+                  <TableHead className="text-center font-bold text-[11px] uppercase tracking-widest py-5">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-8">Chargement des étudiants...</TableCell>
+                    <TableCell colSpan={7} className="text-center py-20">
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="h-10 w-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+                        <p className="text-sm font-medium text-muted-foreground italic">Synchronisation des données...</p>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 ) : filteredStudents.length > 0 ? (
-                  filteredStudents.map((student) => {
-                    const calculateAge = (dob: string) => {
-                      if (!dob) return "-";
-                      try {
-                        const birthDate = new Date(dob);
-                        if (isNaN(birthDate.getTime())) return "-";
-                        const today = new Date();
-                        let age = today.getFullYear() - birthDate.getFullYear();
-                        const m = today.getMonth() - birthDate.getMonth();
-                        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-                          age--;
-                        }
-                        return age;
-                      } catch {
-                        return "-";
-                      }
-                    };
-
+                  filteredStudents.map((student, idx) => {
                     return (
                       <TableRow
                         key={student.id}
-                        className="cursor-pointer"
+                        className="group hover:bg-primary/5 transition-all cursor-pointer border-b border-primary/5"
                         onClick={() => navigate(`/students/${student.id}`)}
                       >
-                        <TableCell className="font-mono text-sm py-4">{student.cin}</TableCell>
-                        <TableCell className="font-medium py-4 uppercase">{student.Nom || "-"}</TableCell>
-                        <TableCell className="font-medium py-4 capitalize">{student.Prenom || "-"}</TableCell>
-                        <TableCell className="py-4 text-right font-medium" dir="rtl">
-                          {student.Nom_Arabe || student.Prenom_arabe
-                            ? `${student.Nom_Arabe || ''} ${student.Prenom_arabe || ''}`.trim()
-                            : <span className="text-muted-foreground">-</span>}
+                        <TableCell className="font-mono font-bold text-sm text-primary/80 py-5">{student.cin}</TableCell>
+                        <TableCell className="py-5">
+                          <div className="flex flex-col">
+                            <span className="font-bold uppercase text-sm group-hover:text-primary transition-colors">{student.Nom} {student.Prenom}</span>
+                            <span className="text-[10px] text-muted-foreground font-mono">{student.NiveauScolaire || "Niveau non défini"}</span>
+                          </div>
                         </TableCell>
-                        <TableCell className="py-4">{student.LibelleLong || "-"}</TableCell>
-                        <TableCell className="py-4 font-mono text-sm">{student.NiveauScolaire || "-"}</TableCell>
-                        <TableCell className="text-center py-4">
+                        <TableCell className="py-5 pr-8 text-right font-arabic" dir="rtl">
+                          {student.Nom_Arabe || student.Prenom_arabe
+                            ? <span className="font-bold text-base text-secondary/80">{student.Nom_Arabe || ''} {student.Prenom_arabe || ''}</span>
+                            : <span className="text-muted-foreground/30 text-xs italic">Non renseigné</span>}
+                        </TableCell>
+                        <TableCell className="py-5">
+                          <div className="flex flex-col">
+                            <span className="text-xs font-bold truncate max-w-[150px]">{student.LibelleLong || "Filière inconnue"}</span>
+                            <Badge variant="outline" className="w-fit text-[10px] h-5 px-2 mt-1 border-primary/10 bg-primary/5 text-primary font-bold">{student.CodeDiplome || "-"}</Badge>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center py-5">
                           {(() => {
-                            // documents_count is returned by withCount('documents') on the backend
                             const actualCount = (student as any).documents_count ?? student.documentsUploaded ?? 0;
-                            if (actualCount >= 3) {
-                              return (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-green-100 dark:bg-green-900/30 px-2.5 py-1 text-xs font-semibold text-green-700 dark:text-green-400">
-                                  <FileCheck className="h-3 w-3" />
-                                  {actualCount}/3
-                                </span>
-                              );
-                            } else if (actualCount > 0) {
-                              return (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 dark:bg-yellow-900/30 px-2.5 py-1 text-xs font-semibold text-yellow-700 dark:text-yellow-400">
-                                  <FileCheck className="h-3 w-3" />
-                                  {actualCount}/3
-                                </span>
-                              );
-                            } else {
-                              return (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-red-100 dark:bg-red-900/30 px-2.5 py-1 text-xs font-semibold text-red-600 dark:text-red-400">
-                                  <FileX className="h-3 w-3" />
-                                  0/3
-                                </span>
-                              );
-                            }
+                            const percentage = (actualCount / 3) * 100;
+                            return (
+                              <div className="flex flex-col items-center gap-1.5">
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-xs font-black ${actualCount === 3 ? "text-secondary" : actualCount > 0 ? "text-amber-500" : "text-destructive"}`}>
+                                    {actualCount}/3
+                                  </span>
+                                  <div className="h-1.5 w-12 bg-muted rounded-full overflow-hidden">
+                                    <div 
+                                      className={`h-full transition-all duration-1000 ${actualCount === 3 ? "bg-secondary" : actualCount > 0 ? "bg-amber-500" : "bg-destructive"}`} 
+                                      style={{ width: `${percentage}%` }} 
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            );
                           })()}
                         </TableCell>
-                        <TableCell className="text-center py-4">
+                        <TableCell className="text-center py-5">
                           {getStatusBadge(student.status)}
                         </TableCell>
-                        <TableCell className="text-center py-4" onClick={(e) => e.stopPropagation()}>
+                        <TableCell className="text-center py-5" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-center gap-2">
                             <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8 px-3 border-blue-300 text-blue-700 hover:bg-blue-50 hover:text-blue-800 hover:border-blue-400"
+                              variant="ghost"
+                              size="icon"
+                              className="h-9 w-9 rounded-xl hover:bg-primary/10 hover:text-primary transition-all"
                               onClick={() => navigate(`/students/${student.id}`)}
+                              title="Détails"
                             >
-                              <Eye className="mr-1.5 h-3.5 w-3.5" />
-                              Voir
+                              <Eye className="h-4 w-4" />
                             </Button>
                             <Button
-                              variant="destructive"
-                              size="sm"
-                              className="h-8 px-3 bg-red-600 hover:bg-red-700"
+                              variant="ghost"
+                              size="icon"
+                              className="h-9 w-9 rounded-xl hover:bg-destructive/10 hover:text-destructive transition-all"
                               onClick={() => {
                                 setStudentToDelete(student);
                                 setIsDeleteDialogOpen(true);
                               }}
+                              title="Supprimer"
                             >
-                              <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-                              Supprimer
+                              <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
                         </TableCell>
@@ -312,8 +353,8 @@ const Students = () => {
                   })
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                      Aucun étudiant ne correspond à vos critères
+                    <TableCell colSpan={7} className="text-center py-32 text-muted-foreground italic font-medium">
+                      Aucune donnée trouvée pour les filtres sélectionnés
                     </TableCell>
                   </TableRow>
                 )}

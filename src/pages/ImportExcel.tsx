@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileUp, FileSpreadsheet, Check, Info, Star } from "lucide-react";
+import { FileUp, FileSpreadsheet, Check, Info, Star, XCircle } from "lucide-react";
 import * as XLSX from "xlsx";
 import { apiService } from "@/lib/api-service";
 import { toast } from "sonner";
@@ -110,67 +111,61 @@ const ImportExcel = () => {
     { name: "Prenom_arabe",      example: "فتيحة",          required: false, description: "Prénom (Arabe)" },
     { name: "NiveauScolaire",    example: "Baccalauréat",  required: false, description: "Niveau scolaire" },
   ];
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-10 pb-10">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Importer les données des étudiants</h1>
-        <p className="text-muted-foreground">Téléversez un fichier Excel avec les enregistrements des étudiants</p>
+        <h1 className="text-3xl font-bold tracking-tight brand-gradient-text">Importation Massive</h1>
+        <p className="text-muted-foreground mt-1">Alimentez la base de données avec les enregistrements officiels du site ISTA/OFPPT</p>
       </div>
 
       {/* Excel Structure Guide */}
-      <Card className="border-blue-200 bg-blue-50/40 dark:border-blue-800 dark:bg-blue-950/20">
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/50">
-              <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+      <Card className="glass-card border-none shadow-xl overflow-hidden">
+        <CardHeader className="bg-primary/5 border-b border-primary/10 pb-6">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+              <Info className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <CardTitle className="text-base text-blue-800 dark:text-blue-200">Structure requise du fichier Excel</CardTitle>
-              <CardDescription className="text-blue-600/80 dark:text-blue-400/80">
-                Votre fichier Excel doit contenir les colonnes suivantes (la première ligne doit être l'en-tête)
+              <CardTitle className="text-lg font-bold tracking-tight">Directives de Formatage</CardTitle>
+              <CardDescription className="font-medium">
+                Veuillez respecter scrupuleusement la structure des colonnes pour garantir l'intégrité de l'import.
               </CardDescription>
             </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto rounded-b-xl">
+          <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-blue-200 dark:border-blue-800 bg-blue-100/60 dark:bg-blue-900/30">
-                  <th className="px-4 py-2 text-left font-semibold text-blue-800 dark:text-blue-200">Nom de colonne</th>
-                  <th className="px-4 py-2 text-left font-semibold text-blue-800 dark:text-blue-200">Exemple</th>
-                  <th className="px-4 py-2 text-left font-semibold text-blue-800 dark:text-blue-200">Description</th>
-                  <th className="px-4 py-2 text-left font-semibold text-blue-800 dark:text-blue-200">Statut</th>
+                <tr className="bg-muted/30 border-b border-primary/5">
+                  <th className="px-6 py-4 text-left font-bold text-[11px] uppercase tracking-widest">Colonne</th>
+                  <th className="px-6 py-4 text-left font-bold text-[11px] uppercase tracking-widest">Exemple</th>
+                  <th className="px-6 py-4 text-left font-bold text-[11px] uppercase tracking-widest">Usage</th>
+                  <th className="px-6 py-4 text-left font-bold text-[11px] uppercase tracking-widest">Exigence</th>
                 </tr>
               </thead>
               <tbody>
                 {excelColumns.map((col, i) => (
                   <tr
                     key={col.name}
-                    className={`border-b border-blue-100 dark:border-blue-900/50 ${
-                      i % 2 === 0
-                        ? "bg-white/60 dark:bg-blue-950/10"
-                        : "bg-blue-50/40 dark:bg-blue-950/20"
-                    }`}
+                    className="border-b border-primary/5 group hover:bg-primary/5 transition-colors"
                   >
-                    <td className="px-4 py-2">
-                      <code className="rounded bg-blue-100 dark:bg-blue-900/50 px-1.5 py-0.5 font-mono text-xs text-blue-800 dark:text-blue-300">
+                    <td className="px-6 py-4">
+                      <code className="rounded-lg bg-primary/10 px-2 py-1 font-mono text-xs font-bold text-primary">
                         {col.name}
                       </code>
                     </td>
-                    <td className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">{col.example}</td>
-                    <td className="px-4 py-2 text-gray-500 dark:text-gray-400">{col.description}</td>
-                    <td className="px-4 py-2">
+                    <td className="px-6 py-4 font-bold text-muted-foreground">{col.example}</td>
+                    <td className="px-6 py-4 text-xs font-medium">{col.description}</td>
+                    <td className="px-6 py-4">
                       {col.required ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-red-100 dark:bg-red-900/30 px-2 py-0.5 text-xs font-medium text-red-700 dark:text-red-400">
-                          <Star className="h-2.5 w-2.5" />
-                          Obligatoire
-                        </span>
+                        <Badge className="bg-destructive/10 text-destructive border-destructive/20 rounded-full font-bold text-[10px]">
+                          CRITIQUE
+                        </Badge>
                       ) : (
-                        <span className="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-800 px-2 py-0.5 text-xs font-medium text-gray-500 dark:text-gray-400">
-                          Optionnel
-                        </span>
+                        <Badge variant="outline" className="rounded-full text-[10px] font-bold border-dashed border-muted-foreground/30 text-muted-foreground">
+                          FACULTATIF
+                        </Badge>
                       )}
                     </td>
                   </tr>
@@ -178,36 +173,43 @@ const ImportExcel = () => {
               </tbody>
             </table>
           </div>
-          <div className="flex items-start gap-2 p-4 text-xs text-blue-600/80 dark:text-blue-400/80">
-            <Star className="mt-0.5 h-3 w-3 shrink-0 text-red-500" />
-            <span>Les colonnes <strong>obligatoires</strong> doivent être présentes pour que l'import fonctionne correctement. Les colonnes optionnelles peuvent être omises.</span>
-          </div>
         </CardContent>
       </Card>
 
       {/* Upload Area */}
-      <Card>
-        <CardContent className="p-6">
+      <Card className="glass-card border-none shadow-xl p-8">
+        <CardContent className="p-0">
           <div
-            className="flex flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed border-primary/30 bg-primary/5 p-12 transition-colors hover:border-primary/50"
+            className="group flex flex-col items-center justify-center gap-6 rounded-3xl border-2 border-dashed border-primary/20 bg-primary/5 p-16 transition-all hover:border-primary/50 hover:bg-primary/10 cursor-pointer"
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleDrop}
           >
-            <FileSpreadsheet className="h-12 w-12 text-primary/60" />
-            <div className="text-center">
-              <p className="font-medium">Glissez et déposez votre fichier Excel ici</p>
-              <p className="text-sm text-muted-foreground">Prend en charge les fichiers .xlsx et .csv</p>
+            <div className="h-20 w-20 rounded-2xl bg-white dark:bg-black/40 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-500">
+              <FileSpreadsheet className="h-10 w-10 text-primary" />
             </div>
-            <label>
+            <div className="text-center space-y-2">
+              <p className="text-xl font-bold">Déposer le registre Excel</p>
+              <p className="text-sm text-muted-foreground max-w-[300px]">Format pris en charge : <span className="font-bold">.xlsx, .csv</span>. Glissez-déposez ou parcourez vos fichiers.</p>
+            </div>
+            <label className="cursor-pointer">
               <input type="file" accept=".xlsx,.csv,.xls" className="hidden" onChange={handleFileSelect} />
-              <Button variant="outline" asChild><span>Parcourir les fichiers</span></Button>
+              <Button className="rounded-2xl bg-primary hover:bg-primary/90 text-white shadow-xl shadow-primary/20 px-10 font-bold h-12" asChild>
+                <span>Sélectionner un fichier</span>
+              </Button>
             </label>
           </div>
           {file && (
-            <div className="mt-4 flex items-center gap-3 rounded-lg border bg-muted/50 p-3">
-              <FileUp className="h-5 w-5 text-primary" />
-              <span className="flex-1 text-sm font-medium">{file.name}</span>
-              <span className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(1)} KB</span>
+            <div className="mt-8 flex items-center gap-4 rounded-2xl border border-primary/20 bg-primary/5 p-4 animate-in fade-in slide-in-from-bottom-4">
+              <div className="h-12 w-12 rounded-xl bg-white dark:bg-black/40 flex items-center justify-center shadow-sm">
+                <FileUp className="h-6 w-6 text-primary" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-bold truncate">{file.name}</p>
+                <p className="text-xs font-medium text-muted-foreground tracking-wider uppercase">{(file.size / 1024).toFixed(1)} KB</p>
+              </div>
+              <Button variant="ghost" size="icon" className="rounded-xl" onClick={() => { setFile(null); setPreviewData([]); }}>
+                <XCircle className="h-5 w-5 text-muted-foreground" />
+              </Button>
             </div>
           )}
         </CardContent>
@@ -215,26 +217,31 @@ const ImportExcel = () => {
 
       {/* Preview */}
       {file && previewData.length > 0 && !imported && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Aperçu</CardTitle>
-            <CardDescription>Vérifiez les données avant de les importer</CardDescription>
+        <Card className="glass-card border-none shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-8">
+          <CardHeader className="bg-primary/5 border-b border-primary/10 flex flex-row items-center justify-between py-6">
+            <div>
+              <CardTitle className="text-lg font-bold tracking-tight">Aperçu de l'Extraction</CardTitle>
+              <CardDescription className="font-medium">Validation préliminaire des données</CardDescription>
+            </div>
+            <Button onClick={handleImport} disabled={importing} className="rounded-xl bg-secondary hover:bg-secondary/90 text-white shadow-lg shadow-secondary/20 font-bold h-11 px-8">
+              {importing ? "Importation..." : `Valider et Importer ${previewData.length} Dossiers`}
+            </Button>
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <Table>
-                <TableHeader>
-                  <TableRow>
+                <TableHeader className="bg-muted/30">
+                  <TableRow className="hover:bg-transparent border-b border-primary/5">
                     {Object.keys(previewData[0]).map(key => (
-                      <TableHead key={key}>{key}</TableHead>
+                      <TableHead key={key} className="font-bold text-[10px] uppercase tracking-widest py-4">{key}</TableHead>
                     ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {previewData.slice(0, 5).map((r, i) => (
-                    <TableRow key={i}>
+                    <TableRow key={i} className="hover:bg-primary/5 transition-colors border-b border-primary/5">
                       {Object.values(r).map((val: any, j) => (
-                        <TableCell key={j}>{val}</TableCell>
+                        <TableCell key={j} className="text-xs font-medium py-4">{val}</TableCell>
                       ))}
                     </TableRow>
                   ))}
@@ -242,29 +249,28 @@ const ImportExcel = () => {
               </Table>
             </div>
             {previewData.length > 5 && (
-              <p className="p-4 text-xs text-center text-muted-foreground">
-                Affichage des 5 premiers sur {previewData.length} enregistrements
-              </p>
+              <div className="p-6 text-center border-t border-primary/5 bg-muted/10">
+                <p className="text-xs font-bold text-muted-foreground tracking-widest uppercase">
+                  Affichage des 5 premiers sur {previewData.length} enregistrements détectés
+                </p>
+              </div>
             )}
           </CardContent>
-          <div className="flex justify-end p-4">
-            <Button onClick={handleImport} disabled={importing}>
-              {importing ? "Importation..." : `Importer ${previewData.length} Étudiants`}
-            </Button>
-          </div>
         </Card>
       )}
 
       {imported && (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-3 py-12">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
-              <Check className="h-6 w-6 text-green-600" />
+        <Card className="glass-card border-none shadow-2xl overflow-hidden">
+          <CardContent className="flex flex-col items-center gap-6 py-20 bg-gradient-to-b from-secondary/5 to-transparent">
+            <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-secondary/10 shadow-[0_0_20px_rgba(46,125,50,0.15)] animate-bounce">
+              <Check className="h-10 w-10 text-secondary" />
             </div>
-            <p className="font-semibold">Importation réussie !</p>
-            <p className="text-sm text-muted-foreground">{previewData.length} étudiants ont été importés.</p>
-            <Button variant="outline" onClick={() => { setFile(null); setPreviewData([]); setImported(false); }}>
-              Importer un autre fichier
+            <div className="text-center space-y-2">
+              <h2 className="text-2xl font-black brand-gradient-text">Importation Finalisée !</h2>
+              <p className="text-muted-foreground font-medium">{previewData.length} dossiers ont été synchronisés avec la base de données centrale.</p>
+            </div>
+            <Button variant="outline" className="rounded-xl border-primary/20 text-primary hover:bg-primary/5 font-bold h-11 px-8" onClick={() => { setFile(null); setPreviewData([]); setImported(false); }}>
+              Importer un nouveau registre
             </Button>
           </CardContent>
         </Card>

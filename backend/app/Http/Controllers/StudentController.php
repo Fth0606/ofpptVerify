@@ -486,6 +486,147 @@ class StudentController extends Controller
         }
     }
 
+    public function verifyStudent(\Illuminate\Http\Request $request)
+    {
+        set_time_limit(0);
+        $cin = $request->input('cin');
+        $student = Student::where('cin', $cin)->with('documents')->first();
+
+        if (!$student) {
+            return response()->json(['error' => 'Student not found'], 404);
+        }
+
+        if ($student->documents->isEmpty()) {
+            return response()->json(['error' => 'No documents uploaded for this student'], 422);
+        }
+
+        $storageAppDir = storage_path('app');
+        if (!is_dir($storageAppDir)) {
+            mkdir($storageAppDir, 0755, true);
+        }
+
+        $zipPath = storage_path('app/temp_verify_' . uniqid() . '.zip');
+        $zip     = new ZipArchive;
+
+        if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+            return response()->json(['error' => 'Failed to create temporary ZIP file'], 500);
+        }
+
+        $filesAdded = 0;
+        foreach ($student->documents as $doc) {
+            $binary = base64_decode($doc->file_data);
+            if (!$binary) continue;
+            $ext      = match($doc->mime_type) {
+                'image/png'       => 'png',
+                'application/pdf' => 'pdf',
+                default           => 'jpg',
+            };
+            $zipEntry = $student->cin . '/' . $doc->type . '_' . $doc->id . '.' . $ext;
+            $zip->addFromString($zipEntry, $binary);
+            $filesAdded++;
+        }
+        $zip->close();
+
+        if ($filesAdded === 0 || !file_exists($zipPath)) {
+            if (file_exists($zipPath)) unlink($zipPath);
+            return response()->json(['error' => 'No valid document files found to verify'], 422);
+        }
+
+        $expectedData = [
+            $student->cin => [
+                'fullName'       => trim($student->Nom . ' ' . $student->Prenom),
+                'fullNameArabic' => trim(($student->Nom_Arabe ?? '') . ' ' . ($student->Prenom_arabe ?? '')),
+                'dateOfBirth'    => $student->DateNaissance,
+                'cin'            => $student->cin,
+                'student_id'     => $student->MatriculeEtudiant
+            ]
+        ];
+
+        try {
+            $ocrUrl   = env('OCR_SERVICE_URL', 'http://localhost:5001');
+            \Illuminate\Support\Facades\Log::info("Sending student verification request to OCR service: " . $ocrUrl . " for CIN: " . $cin);
+            
+            $response = Http::timeout(300) // 5 minutes timeout for a single student
+                ->attach('file', file_get_contents($zipPath), 'verify.zip')
+                ->post($ocrUrl . '/validate', [
+                    'expected_data' => json_encode($expectedData)
+                ]);
+
+            \Illuminate\Support\Facades\Log::info("OCR Service response status: " . $response->status());
+            
+            unlink($zipPath);
+
+            if ($response->successful()) {
+                $ocrResults = $response->json();
+
+                // It should return an array with one result since we only sent one student
+                foreach ($ocrResults as $res) {
+                    if ($res['cin'] !== $cin) continue;
+
+                    $mismatches       = [];
+                    $verifiedName     = $res['verified_name']         ?? null;
+                    $verifiedArabicName = $res['verified_arabic_name'] ?? null;
+                    $verifiedDob      = $res['verified_dob']           ?? null;
+                    $isCorrect        = $res['is_correct']             ?? true;
+
+                    if (isset($res['errors'])) {
+                        foreach ($res['errors'] as $error) {
+                            $mismatches[] = [
+                                'document'   => $error['file'],
+                                'field'      => isset($error['soft']) && $error['soft'] ? 'Avertissement OCR' : 'Erreur OCR',
+                                'excelValue' => 'Document valide',
+                                'ocrValue'   => $error['error'],
+                                'soft'       => $error['soft'] ?? false,
+                            ];
+                        }
+                    }
+
+                    if (!$isCorrect && empty($mismatches)) {
+                        $mismatches[] = [
+                            'document'   => 'Verification Failure',
+                            'field'      => 'OCR Général',
+                            'excelValue' => 'Correspondances attendues',
+                            'ocrValue'   => 'Incohérence détectée dans les données du document',
+                        ];
+                    }
+
+                    if (isset($res['file_details'])) {
+                        foreach ($res['file_details'] as $detail) {
+                            if (preg_match('/^(\w+)_(\d+)\./', $detail['file'], $m)) {
+                                $docId = $m[2];
+                                Document::where('id', $docId)->update([
+                                    'ocr_extracted_name'        => $detail['extracted_name']         ?? null,
+                                    'ocr_extracted_arabic_name' => $detail['extracted_arabic_name']  ?? null,
+                                    'ocr_extracted_dob'         => $detail['extracted_dob']           ?? null,
+                                    'ocr_extracted_cin'         => $detail['extracted_cin']           ?? null,
+                                    'ocr_extracted_cne'         => $detail['extracted_cne']           ?? null,
+                                    'ocr_status'                => 'processed',
+                                ]);
+                            }
+                        }
+                    }
+
+                    $student->update([
+                        'status'               => $isCorrect ? 'verified' : 'mismatch',
+                        'mismatch_details'     => $mismatches,
+                        'verified_arabic_name' => $verifiedArabicName,
+                    ]);
+                    
+                    return response()->json($res); // Return just the single result object, or the first array element
+                }
+                
+                // If the loop didn't return, return the raw results or an error
+                return response()->json($ocrResults);
+            }
+
+            return response()->json(['error' => 'OCR Service failed'], 500);
+
+        } catch (\Exception $e) {
+            if (file_exists($zipPath)) unlink($zipPath);
+            return response()->json(['error' => 'Connection failed: ' . $e->getMessage()], 500);
+        }
+    }
+
     // ─────────────────────────────────────────────
     // HELPERS
     // ─────────────────────────────────────────────
